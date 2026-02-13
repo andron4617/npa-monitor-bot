@@ -11,7 +11,6 @@ from telegram import Bot
 
 SOURCES_FILE = "sources.json"
 STATE_FILE = "state.json"
-CHECK_EVERY_SECONDS = 3 * 60 * 60  # 3 hours
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 CHAT_ID = os.getenv("CHAT_ID", "")
@@ -104,16 +103,13 @@ async def run_once(bot: Bot, sources: List[Dict[str, str]], state: Dict[str, Dic
 async def main():
     if not BOT_TOKEN or not CHAT_ID:
         raise RuntimeError("Set BOT_TOKEN and CHAT_ID environment variables.")
+
     sources = load_sources()
     state = load_state()
 
     bot = Bot(token=BOT_TOKEN)
-
-    print("Monitoring started. Interval: 3 hours.")
-    while True:
-        await run_once(bot, sources, state)
-        save_state(state)
-        await asyncio.sleep(CHECK_EVERY_SECONDS)
+    await run_once(bot, sources, state)
+    save_state(state)
 
 if __name__ == "__main__":
     asyncio.run(main())
