@@ -1,4 +1,10 @@
 [
-  {"regulator": "Банк России", "url": "https://example.com/cbr"},
-  {"regulator": "ФСТЭК России", "url": "https://example.com/fstec"}
+  {
+    "regulator": "Банк России",
+    "url": "https://www.cbr.ru/press/pr/?filetype=regulation"
+  },
+  {
+    "regulator": "ФСТЭК России",
+    "url": "https://fstec.ru/normotvorcheskaya/deyatelnost"
+  }
 ]
