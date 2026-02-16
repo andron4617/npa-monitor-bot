@@ -2,26 +2,22 @@ name: NPA Monitor Bot
 
 on:
   schedule:
-    - cron: "0 */3 * * *" # каждые 3 часа
+    - cron: "0 */3 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
-concurrency:
-  group: npa-monitor
-  cancel-in-progress: true
-
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 12
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -40,7 +36,7 @@ jobs:
         run: |
           python main.py
 
-      - name: Commit & push state.json
+      - name: Commit state.json
         run: |
           if [ -f state.json ]; then
             git config user.name "github-actions[bot]"
@@ -51,5 +47,4 @@ jobs:
             git push
           else
             echo "state.json not found"
-            exit 0
           fi
