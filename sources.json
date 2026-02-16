@@ -1,10 +1,60 @@
 [
   {
-    "regulator": "Банк России",
-    "url": "https://cbr.ru/Queries/UniDbQuery/File/13293"
+    "regulator": "Президент РФ",
+    "type": "html_links",
+    "url": "http://publication.pravo.gov.ru/documents/daily?block=president"
   },
   {
-    "regulator": "ФСТЭК России",
-    "url": "https://fstec.ru/normotvorcheskaya/deyatelnost"
+    "regulator": "Правительство РФ",
+    "type": "html_links",
+    "url": "http://publication.pravo.gov.ru/documents/daily?block=government"
+  },
+  {
+    "regulator": "ФОИВ (ежедневно)",
+    "type": "html_links",
+    "url": "http://publication.pravo.gov.ru/documents/daily?block=federal_authorities"
+  },
+
+  {
+    "regulator": "ЦБ РФ",
+    "type": "rss",
+    "url": "https://cbr.ru/rss/RssNews"
+  },
+  {
+    "regulator": "ЦБ РФ — НПА",
+    "type": "html_links",
+    "url": "https://cbr.ru/na/"
+  },
+  {
+    "regulator": "ЦБ РФ — проекты НПА",
+    "type": "html_links",
+    "url": "https://cbr.ru/project_na"
+  },
+
+  {
+    "regulator": "ФСТЭК (pravo.gov)",
+    "type": "html_links",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv041"
+  },
+  {
+    "regulator": "ФСБ (pravo.gov)",
+    "type": "html_links",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv055"
+  },
+  {
+    "regulator": "Минцифры (pravo.gov)",
+    "type": "html_links",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv290"
+  },
+  {
+    "regulator": "Роскомнадзор (pravo.gov)",
+    "type": "html_links",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv291"
+  },
+
+  {
+    "regulator": "Проекты НПА (regulation.gov)",
+    "type": "rss",
+    "url": "https://regulation.gov.ru/api/public/Rss/"
   }
 ]
