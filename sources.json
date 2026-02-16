@@ -1,62 +1,56 @@
 [
   {
-    "regulator": "Президент РФ",
-    "type": "pravo_rss",
-    "url": "http://publication.pravo.gov.ru/rss",
-    "filters": { "block": "president" }
+    "id": "president_daily",
+    "regulator": "Указы Президента РФ",
+    "type": "pravo_block",
+    "url": "http://publication.pravo.gov.ru/documents/daily?block=president"
   },
   {
+    "id": "government_daily",
     "regulator": "Правительство РФ",
-    "type": "pravo_rss",
-    "url": "http://publication.pravo.gov.ru/rss",
-    "filters": { "block": "government" }
+    "type": "pravo_block",
+    "url": "http://publication.pravo.gov.ru/documents/daily?block=government"
   },
   {
-    "regulator": "Банк России",
-    "type": "cbr_rss",
-    "url": "https://cbr.ru/rss/RssNews"
-  },
-  {
-    "regulator": "Банк России (проекты НПА)",
-    "type": "cbr_html",
-    "url": "https://cbr.ru/project_na/"
-  },
-
-  {
-    "regulator": "ФСТЭК",
+    "id": "fstec_block",
+    "regulator": "ФСТЭК России",
     "type": "pravo_block",
     "url": "http://publication.pravo.gov.ru/documents/block/foiv041"
   },
   {
-    "regulator": "ФСБ",
+    "id": "fsb_block",
+    "regulator": "ФСБ России",
     "type": "pravo_block",
     "url": "http://publication.pravo.gov.ru/documents/block/foiv055"
   },
   {
-    "regulator": "Минцифры",
+    "id": "mincifry_block",
+    "regulator": "Минцифры России",
     "type": "pravo_block",
     "url": "http://publication.pravo.gov.ru/documents/block/foiv290"
   },
   {
+    "id": "rkn_block",
     "regulator": "Роскомнадзор",
     "type": "pravo_block",
     "url": "http://publication.pravo.gov.ru/documents/block/foiv291"
   },
-
   {
+    "id": "regulation_rss",
     "regulator": "Проекты НПА",
-    "type": "regulation_rss",
+    "type": "rss",
     "url": "https://regulation.gov.ru/api/public/Rss/"
   },
-
   {
-    "regulator": "НСПК",
-    "type": "nspk_security",
-    "url": "https://www.nspk.ru/cards-mir/security"
+    "id": "cbr_acts",
+    "regulator": "Банк России",
+    "type": "html_links",
+    "url": "https://cbr.ru/na/"
   },
   {
-    "regulator": "Росстандарт",
-    "type": "rosstandard",
-    "url": "https://www.rst.gov.ru/portal/gost/"
+    "id": "cbr_is",
+    "regulator": "Банк России",
+    "type": "html_links",
+    "url": "https://cbr.ru/information_security/"
   }
 ]
