@@ -1,5 +1,4 @@
 aiohttp==3.9.5
 beautifulsoup4==4.12.3
 lxml==5.2.2
-python-dateutil==2.9.0.post0
 
