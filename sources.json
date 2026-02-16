@@ -1,55 +1,45 @@
 [
   {
     "regulator": "Президент РФ",
-    "type": "html_links",
-    "url": "http://publication.pravo.gov.ru/documents/daily?block=president"
+    "type": "pravogov_block",
+    "url": "https://publication.pravo.gov.ru/documents/daily?block=president&index=1&pageSize=200"
   },
   {
     "regulator": "Правительство РФ",
-    "type": "html_links",
-    "url": "http://publication.pravo.gov.ru/documents/daily?block=government"
-  },
-
-  {
-    "regulator": "ЦБ РФ",
-    "type": "rss",
-    "url": "https://cbr.ru/rss/RssNews"
-  },
-  {
-    "regulator": "ЦБ РФ",
-    "type": "html_links",
-    "url": "https://cbr.ru/na/"
-  },
-  {
-    "regulator": "ЦБ РФ",
-    "type": "html_links",
-    "url": "https://cbr.ru/project_na"
+    "type": "pravogov_block",
+    "url": "https://publication.pravo.gov.ru/documents/daily?block=government&index=1&pageSize=200"
   },
 
   {
     "regulator": "ФСТЭК",
-    "type": "html_links",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv041"
+    "type": "pravogov_block",
+    "url": "https://publication.pravo.gov.ru/documents/block/foiv041?index=1&pageSize=200"
   },
   {
     "regulator": "ФСБ",
-    "type": "html_links",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv055"
+    "type": "pravogov_block",
+    "url": "https://publication.pravo.gov.ru/documents/block/foiv055?index=1&pageSize=200"
   },
   {
     "regulator": "Минцифры",
-    "type": "html_links",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv290"
+    "type": "pravogov_block",
+    "url": "https://publication.pravo.gov.ru/documents/block/foiv290?index=1&pageSize=200"
   },
   {
     "regulator": "Роскомнадзор",
-    "type": "html_links",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv291"
+    "type": "pravogov_block",
+    "url": "https://publication.pravo.gov.ru/documents/block/foiv291?index=1&pageSize=200"
   },
 
   {
-    "regulator": "Проекты НПА (regulation.gov)",
-    "type": "rss",
-    "url": "https://regulation.gov.ru/api/public/Rss/"
+    "regulator": "ЦБ РФ",
+    "type": "html_allowlist",
+    "url": "https://cbr.ru/",
+    "allow_regex": [
+      "https?://(www\\.)?cbr\\.ru/Crosscut/LawActs/File/\\d+",
+      "https?://(www\\.)?cbr\\.ru/Content/Document/File/\\d+"
+    ]
   }
+
+  // regulation.gov пока отключаем до ключевых слов
 ]
