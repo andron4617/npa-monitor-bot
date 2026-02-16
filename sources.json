@@ -1,85 +1,94 @@
 [
   {
+    "id": "president_pravo_daily",
     "regulator": "Президент РФ",
     "type": "pravo_block",
-    "block": "president",
-    "limit": 15,
-    "enabled": true
+    "url": "http://publication.pravo.gov.ru/documents/daily?block=president",
+    "ib_only": true
   },
   {
+    "id": "government_pravo_daily",
     "regulator": "Правительство РФ",
     "type": "pravo_block",
-    "block": "government",
-    "limit": 15,
-    "enabled": true
+    "url": "http://publication.pravo.gov.ru/documents/daily?block=government",
+    "ib_only": true
   },
 
   {
-    "regulator": "ФСТЭК России",
-    "type": "pravo_foiv",
-    "foiv": "foiv041",
-    "limit": 15,
-    "enabled": true
+    "id": "cbr_rss_news",
+    "regulator": "ЦБ РФ",
+    "type": "rss",
+    "url": "https://cbr.ru/rss/RssNews",
+    "ib_only": true
   },
   {
-    "regulator": "ФСБ России",
-    "type": "pravo_foiv",
-    "foiv": "foiv055",
-    "limit": 15,
-    "enabled": true
+    "id": "cbr_info_sec",
+    "regulator": "ЦБ РФ",
+    "type": "html_links",
+    "url": "https://cbr.ru/information_security",
+    "ib_only": true
+  },
+
+  {
+    "id": "fstec_updates",
+    "regulator": "ФСТЭК",
+    "type": "html_links",
+    "url": "https://fstec.ru/obnovleniya",
+    "ib_only": true
   },
   {
-    "regulator": "Минцифры России",
-    "type": "pravo_foiv",
-    "foiv": "foiv290",
-    "limit": 15,
-    "enabled": true
+    "id": "fstec_rss",
+    "regulator": "ФСТЭК",
+    "type": "rss",
+    "url": "https://fstec.ru/rss-lenta",
+    "ib_only": true
   },
+
   {
+    "id": "fsb_pravo_block",
+    "regulator": "ФСБ",
+    "type": "pravo_block",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv055",
+    "ib_only": true
+  },
+
+  {
+    "id": "mintsifry_pravo_block",
+    "regulator": "Минцифры",
+    "type": "pravo_block",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv290",
+    "ib_only": true
+  },
+
+  {
+    "id": "rkn_pravo_block",
     "regulator": "Роскомнадзор",
-    "type": "pravo_foiv",
-    "foiv": "foiv291",
-    "limit": 15,
-    "enabled": true
+    "type": "pravo_block",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv291",
+    "ib_only": true
   },
 
   {
-    "regulator": "Банк России",
-    "type": "cbr_lawacts",
-    "url": "https://cbr.ru/na/",
-    "limit": 15,
-    "enabled": true
-  },
-  {
-    "regulator": "Банк России (проекты НПА)",
-    "type": "cbr_projects",
-    "url": "https://cbr.ru/project_na",
-    "limit": 15,
-    "enabled": true
-  },
-
-  {
-    "regulator": "Проекты НПА (regulation.gov.ru)",
+    "id": "regulation_gov_rss",
+    "regulator": "Проекты НПА",
     "type": "rss",
     "url": "https://regulation.gov.ru/api/public/Rss/",
-    "limit": 15,
-    "enabled": true
+    "ib_only": true
   },
 
   {
+    "id": "rosstandart_gost",
     "regulator": "Росстандарт",
-    "type": "html_generic",
+    "type": "html_links",
     "url": "https://www.rst.gov.ru/portal/gost/",
-    "limit": 10,
-    "enabled": false,
-    "note": "Выключено по умолчанию: страница не дает стабильный список НПА. Нужна конкретная лента/раздел с документами."
+    "ib_only": true
   },
+
   {
+    "id": "nspk_security_pcidss",
     "regulator": "НСПК",
-    "type": "html_generic",
-    "url": "https://www.nspk.ru/",
-    "limit": 10,
-    "enabled": false,
-    "note": "Выключено по умолчанию: главная/пресс-центр = шум. Нужен точный раздел с тарифами/правилами в виде списка/ленты."
+    "type": "html_links",
+    "url": "https://www.nspk.ru/cards-mir/security/standart-pcidss",
+    "ib_only": true
   }
 ]
