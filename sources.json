@@ -1,107 +1,85 @@
 [
   {
     "regulator": "Президент РФ",
-    "type": "html_allowlist",
-    "url": "http://publication.pravo.gov.ru/documents/block/president",
-    "allow_regex": [
-      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
-    ]
+    "type": "pravo_block",
+    "block": "president",
+    "limit": 15,
+    "enabled": true
   },
-
   {
     "regulator": "Правительство РФ",
-    "type": "html_allowlist",
-    "url": "http://publication.pravo.gov.ru/documents/block/government",
-    "allow_regex": [
-      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
-    ]
+    "type": "pravo_block",
+    "block": "government",
+    "limit": 15,
+    "enabled": true
   },
 
   {
-    "regulator": "ЦБ РФ",
-    "type": "html_allowlist",
-    "url": "https://cbr.ru/na/",
-    "allow_regex": [
-      "https?://(www\\.)?cbr\\.ru/Crosscut/LawActs/File/\\d+",
-      "https?://(www\\.)?cbr\\.ru/Content/Document/File/\\d+"
-    ]
+    "regulator": "ФСТЭК России",
+    "type": "pravo_foiv",
+    "foiv": "foiv041",
+    "limit": 15,
+    "enabled": true
   },
   {
-    "regulator": "ЦБ РФ",
-    "type": "html_allowlist",
-    "url": "https://cbr.ru/project_na/",
-    "allow_regex": [
-      "https?://(www\\.)?cbr\\.ru/Crosscut/LawActs/File/\\d+",
-      "https?://(www\\.)?cbr\\.ru/Content/Document/File/\\d+"
-    ]
+    "regulator": "ФСБ России",
+    "type": "pravo_foiv",
+    "foiv": "foiv055",
+    "limit": 15,
+    "enabled": true
   },
   {
-    "regulator": "ЦБ РФ",
-    "type": "html_allowlist",
-    "url": "https://cbr.ru/analytics/na_vr/",
-    "allow_regex": [
-      "https?://(www\\.)?cbr\\.ru/Crosscut/LawActs/File/\\d+",
-      "https?://(www\\.)?cbr\\.ru/Content/Document/File/\\d+"
-    ]
+    "regulator": "Минцифры России",
+    "type": "pravo_foiv",
+    "foiv": "foiv290",
+    "limit": 15,
+    "enabled": true
   },
-
-  {
-    "regulator": "ФСТЭК",
-    "type": "html_allowlist",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv041",
-    "allow_regex": [
-      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
-    ]
-  },
-
-  {
-    "regulator": "ФСБ",
-    "type": "html_allowlist",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv055",
-    "allow_regex": [
-      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
-    ]
-  },
-
-  {
-    "regulator": "Минцифры",
-    "type": "html_allowlist",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv290",
-    "allow_regex": [
-      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
-    ]
-  },
-
   {
     "regulator": "Роскомнадзор",
-    "type": "html_allowlist",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv291",
-    "allow_regex": [
-      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
-    ]
+    "type": "pravo_foiv",
+    "foiv": "foiv291",
+    "limit": 15,
+    "enabled": true
+  },
+
+  {
+    "regulator": "Банк России",
+    "type": "cbr_lawacts",
+    "url": "https://cbr.ru/na/",
+    "limit": 15,
+    "enabled": true
+  },
+  {
+    "regulator": "Банк России (проекты НПА)",
+    "type": "cbr_projects",
+    "url": "https://cbr.ru/project_na",
+    "limit": 15,
+    "enabled": true
+  },
+
+  {
+    "regulator": "Проекты НПА (regulation.gov.ru)",
+    "type": "rss",
+    "url": "https://regulation.gov.ru/api/public/Rss/",
+    "limit": 15,
+    "enabled": true
   },
 
   {
     "regulator": "Росстандарт",
-    "type": "html_allowlist",
+    "type": "html_generic",
     "url": "https://www.rst.gov.ru/portal/gost/",
-    "allow_regex": [
-      "https?://www\\.rst\\.gov\\.ru/portal/gost/.+"
-    ]
+    "limit": 10,
+    "enabled": false,
+    "note": "Выключено по умолчанию: страница не дает стабильный список НПА. Нужна конкретная лента/раздел с документами."
   },
-
   {
     "regulator": "НСПК",
-    "type": "html_allowlist",
+    "type": "html_generic",
     "url": "https://www.nspk.ru/",
-    "allow_regex": [
-      "https?://www\\.nspk\\.ru/.+"
-    ]
-  },
-
-  {
-    "regulator": "Проекты НПА",
-    "type": "rss",
-    "url": "https://regulation.gov.ru/api/public/Rss/"
+    "limit": 10,
+    "enabled": false,
+    "note": "Выключено по умолчанию: главная/пресс-центр = шум. Нужен точный раздел с тарифами/правилами в виде списка/ленты."
   }
 ]
