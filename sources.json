@@ -1,94 +1,69 @@
 [
   {
-    "id": "president_pravo_daily",
-    "regulator": "Президент РФ",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/daily?block=president",
-    "ib_only": true
+    "regulator": "Указы Президента РФ",
+    "kind": "pravo_block",
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/daily?block=president",
+      "http://publication.pravo.gov.ru/documents/weekly?block=president"
+    ],
+    "max_items": 15
   },
   {
-    "id": "government_pravo_daily",
     "regulator": "Правительство РФ",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/daily?block=government",
-    "ib_only": true
+    "kind": "pravo_block",
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/daily?block=government",
+      "http://publication.pravo.gov.ru/documents/weekly?block=government"
+    ],
+    "max_items": 15
   },
-
   {
-    "id": "cbr_rss_news",
     "regulator": "ЦБ РФ",
-    "type": "rss",
-    "url": "https://cbr.ru/rss/RssNews",
-    "ib_only": true
+    "kind": "cbr_docs",
+    "urls": [
+      "https://cbr.ru/na/",
+      "https://cbr.ru/project_na"
+    ],
+    "max_items": 20
   },
   {
-    "id": "cbr_info_sec",
-    "regulator": "ЦБ РФ",
-    "type": "html_links",
-    "url": "https://cbr.ru/information_security",
-    "ib_only": true
-  },
-
-  {
-    "id": "fstec_updates",
     "regulator": "ФСТЭК",
-    "type": "html_links",
-    "url": "https://fstec.ru/obnovleniya",
-    "ib_only": true
+    "kind": "pravo_foiv",
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/block/foiv041"
+    ],
+    "max_items": 15
   },
   {
-    "id": "fstec_rss",
-    "regulator": "ФСТЭК",
-    "type": "rss",
-    "url": "https://fstec.ru/rss-lenta",
-    "ib_only": true
-  },
-
-  {
-    "id": "fsb_pravo_block",
     "regulator": "ФСБ",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv055",
-    "ib_only": true
+    "kind": "pravo_foiv",
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/block/foiv055"
+    ],
+    "max_items": 15
   },
-
   {
-    "id": "mintsifry_pravo_block",
     "regulator": "Минцифры",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv290",
-    "ib_only": true
+    "kind": "pravo_foiv",
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/block/foiv290"
+    ],
+    "max_items": 15
   },
-
   {
-    "id": "rkn_pravo_block",
     "regulator": "Роскомнадзор",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv291",
-    "ib_only": true
+    "kind": "pravo_foiv",
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/block/foiv291"
+    ],
+    "max_items": 15
   },
-
   {
-    "id": "regulation_gov_rss",
     "regulator": "Проекты НПА",
-    "type": "rss",
-    "url": "https://regulation.gov.ru/api/public/Rss/",
-    "ib_only": true
-  },
-
-  {
-    "id": "rosstandart_gost",
-    "regulator": "Росстандарт",
-    "type": "html_links",
-    "url": "https://www.rst.gov.ru/portal/gost/",
-    "ib_only": true
-  },
-
-  {
-    "id": "nspk_security_pcidss",
-    "regulator": "НСПК",
-    "type": "html_links",
-    "url": "https://www.nspk.ru/cards-mir/security/standart-pcidss",
-    "ib_only": true
+    "kind": "regulation_rss",
+    "urls": [
+      "https://regulation.gov.ru/api/public/Rss/"
+    ],
+    "max_items": 10
   }
 ]
