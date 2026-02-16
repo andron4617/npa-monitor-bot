@@ -691,7 +691,43 @@
       "http://publication.pravo.gov.ru/document/0001202602160014",
       "http://publication.pravo.gov.ru/document/0001202602160013",
       "http://publication.pravo.gov.ru/document/0001202602160012"
-    ]
+    ],
+    "Банк России": {
+      "https://www.cbr.ru/project_na/?tab.current=t2#a_6688": {
+        "ts": "2026-02-16T13:46:25.757084+00:00"
+      }
+    },
+    "Банк России (проекты НПА)": {
+      "https://cbr.ru/project_na/": {
+        "ts": "2026-02-16T13:46:32.527841+00:00"
+      },
+      "https://cbr.ru/Content/Document/File/48780/form_orv.pdf": {
+        "ts": "2026-02-16T13:46:32.527858+00:00"
+      }
+    },
+    "НСПК": {
+      "https://www.nspk.ru/cards-mir/security": {
+        "ts": "2026-02-16T13:47:10.824834+00:00"
+      },
+      "https://www.nspk.ru/cards-mir/security/standart-pcidss": {
+        "ts": "2026-02-16T13:47:10.824850+00:00"
+      },
+      "https://www.nspk.ru/cards-mir/security/standart-pcidss/self-assessment": {
+        "ts": "2026-02-16T13:47:10.824854+00:00"
+      },
+      "https://www.nspk.ru/cards-mir/security/about-fraud": {
+        "ts": "2026-02-16T13:47:10.824857+00:00"
+      },
+      "https://www.nspk.ru/cards-mir/security/security-program": {
+        "ts": "2026-02-16T13:47:10.824860+00:00"
+      },
+      "https://www.nspk.ru/cards-mir/security/security-program/program-tsp": {
+        "ts": "2026-02-16T13:47:10.824864+00:00"
+      },
+      "https://www.nspk.ru/cards-mir/security/security-program/after-hack": {
+        "ts": "2026-02-16T13:47:10.824867+00:00"
+      }
+    }
   },
   "updated_at": "16.02.2026 09:56"
 }
