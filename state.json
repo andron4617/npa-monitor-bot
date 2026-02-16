@@ -695,6 +695,12 @@
     "Банк России": {
       "https://www.cbr.ru/project_na/?tab.current=t2#a_6688": {
         "ts": "2026-02-16T13:46:25.757084+00:00"
+      },
+      "https://www.cbr.ru/Queries/UniDbQuery/File/90134/7463": {
+        "ts": "2026-02-16T15:37:09.462856+00:00"
+      },
+      "https://www.cbr.ru/analytics/insideinfo/": {
+        "ts": "2026-02-16T15:37:09.462874+00:00"
       }
     },
     "Банк России (проекты НПА)": {
