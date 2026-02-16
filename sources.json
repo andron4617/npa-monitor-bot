@@ -1,41 +1,107 @@
 [
   {
     "regulator": "Президент РФ",
-    "type": "pravogov_block",
-    "url": "https://publication.pravo.gov.ru/documents/daily?block=president&index=1&pageSize=200"
+    "type": "html_allowlist",
+    "url": "http://publication.pravo.gov.ru/documents/block/president",
+    "allow_regex": [
+      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
+    ]
   },
+
   {
     "regulator": "Правительство РФ",
-    "type": "pravogov_block",
-    "url": "https://publication.pravo.gov.ru/documents/daily?block=government&index=1&pageSize=200"
+    "type": "html_allowlist",
+    "url": "http://publication.pravo.gov.ru/documents/block/government",
+    "allow_regex": [
+      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
+    ]
   },
-  {
-    "regulator": "ФСТЭК",
-    "type": "pravogov_block",
-    "url": "https://publication.pravo.gov.ru/documents/block/foiv041?index=1&pageSize=200"
-  },
-  {
-    "regulator": "ФСБ",
-    "type": "pravogov_block",
-    "url": "https://publication.pravo.gov.ru/documents/block/foiv055?index=1&pageSize=200"
-  },
-  {
-    "regulator": "Минцифры",
-    "type": "pravogov_block",
-    "url": "https://publication.pravo.gov.ru/documents/block/foiv290?index=1&pageSize=200"
-  },
-  {
-    "regulator": "Роскомнадзор",
-    "type": "pravogov_block",
-    "url": "https://publication.pravo.gov.ru/documents/block/foiv291?index=1&pageSize=200"
-  },
+
   {
     "regulator": "ЦБ РФ",
     "type": "html_allowlist",
-    "url": "https://cbr.ru/",
+    "url": "https://cbr.ru/na/",
     "allow_regex": [
       "https?://(www\\.)?cbr\\.ru/Crosscut/LawActs/File/\\d+",
       "https?://(www\\.)?cbr\\.ru/Content/Document/File/\\d+"
     ]
+  },
+  {
+    "regulator": "ЦБ РФ",
+    "type": "html_allowlist",
+    "url": "https://cbr.ru/project_na/",
+    "allow_regex": [
+      "https?://(www\\.)?cbr\\.ru/Crosscut/LawActs/File/\\d+",
+      "https?://(www\\.)?cbr\\.ru/Content/Document/File/\\d+"
+    ]
+  },
+  {
+    "regulator": "ЦБ РФ",
+    "type": "html_allowlist",
+    "url": "https://cbr.ru/analytics/na_vr/",
+    "allow_regex": [
+      "https?://(www\\.)?cbr\\.ru/Crosscut/LawActs/File/\\d+",
+      "https?://(www\\.)?cbr\\.ru/Content/Document/File/\\d+"
+    ]
+  },
+
+  {
+    "regulator": "ФСТЭК",
+    "type": "html_allowlist",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv041",
+    "allow_regex": [
+      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
+    ]
+  },
+
+  {
+    "regulator": "ФСБ",
+    "type": "html_allowlist",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv055",
+    "allow_regex": [
+      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
+    ]
+  },
+
+  {
+    "regulator": "Минцифры",
+    "type": "html_allowlist",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv290",
+    "allow_regex": [
+      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
+    ]
+  },
+
+  {
+    "regulator": "Роскомнадзор",
+    "type": "html_allowlist",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv291",
+    "allow_regex": [
+      "http://publication\\.pravo\\.gov\\.ru/document/\\d+"
+    ]
+  },
+
+  {
+    "regulator": "Росстандарт",
+    "type": "html_allowlist",
+    "url": "https://www.rst.gov.ru/portal/gost/",
+    "allow_regex": [
+      "https?://www\\.rst\\.gov\\.ru/portal/gost/.+"
+    ]
+  },
+
+  {
+    "regulator": "НСПК",
+    "type": "html_allowlist",
+    "url": "https://www.nspk.ru/",
+    "allow_regex": [
+      "https?://www\\.nspk\\.ru/.+"
+    ]
+  },
+
+  {
+    "regulator": "Проекты НПА",
+    "type": "rss",
+    "url": "https://regulation.gov.ru/api/public/Rss/"
   }
 ]
