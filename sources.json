@@ -9,11 +9,6 @@
     "type": "html_links",
     "url": "http://publication.pravo.gov.ru/documents/daily?block=government"
   },
-  {
-    "regulator": "ФОИВ (ежедневно)",
-    "type": "html_links",
-    "url": "http://publication.pravo.gov.ru/documents/daily?block=federal_authorities"
-  },
 
   {
     "regulator": "ЦБ РФ",
@@ -21,33 +16,33 @@
     "url": "https://cbr.ru/rss/RssNews"
   },
   {
-    "regulator": "ЦБ РФ — НПА",
+    "regulator": "ЦБ РФ",
     "type": "html_links",
     "url": "https://cbr.ru/na/"
   },
   {
-    "regulator": "ЦБ РФ — проекты НПА",
+    "regulator": "ЦБ РФ",
     "type": "html_links",
     "url": "https://cbr.ru/project_na"
   },
 
   {
-    "regulator": "ФСТЭК (pravo.gov)",
+    "regulator": "ФСТЭК",
     "type": "html_links",
     "url": "http://publication.pravo.gov.ru/documents/block/foiv041"
   },
   {
-    "regulator": "ФСБ (pravo.gov)",
+    "regulator": "ФСБ",
     "type": "html_links",
     "url": "http://publication.pravo.gov.ru/documents/block/foiv055"
   },
   {
-    "regulator": "Минцифры (pravo.gov)",
+    "regulator": "Минцифры",
     "type": "html_links",
     "url": "http://publication.pravo.gov.ru/documents/block/foiv290"
   },
   {
-    "regulator": "Роскомнадзор (pravo.gov)",
+    "regulator": "Роскомнадзор",
     "type": "html_links",
     "url": "http://publication.pravo.gov.ru/documents/block/foiv291"
   },
