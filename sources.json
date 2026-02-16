@@ -9,7 +9,6 @@
     "type": "pravogov_block",
     "url": "https://publication.pravo.gov.ru/documents/daily?block=government&index=1&pageSize=200"
   },
-
   {
     "regulator": "ФСТЭК",
     "type": "pravogov_block",
@@ -30,7 +29,6 @@
     "type": "pravogov_block",
     "url": "https://publication.pravo.gov.ru/documents/block/foiv291?index=1&pageSize=200"
   },
-
   {
     "regulator": "ЦБ РФ",
     "type": "html_allowlist",
@@ -40,6 +38,4 @@
       "https?://(www\\.)?cbr\\.ru/Content/Document/File/\\d+"
     ]
   }
-
-  // regulation.gov пока отключаем до ключевых слов
 ]
