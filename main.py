@@ -1,43 +1,57 @@
+import asyncio
+import json
 import os
 import re
-import json
-import asyncio
-import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Tuple
-from urllib.parse import urljoin, urlparse
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
 from bs4 import BeautifulSoup
+from dateutil import tz
+from gigachat import GigaChat
+from gigachat.models import Chat, Messages, MessagesRole
 
+TZ_MSK = tz.gettz("Europe/Moscow")
 
 STATE_FILE = "state.json"
 SOURCES_FILE = "sources.json"
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-CHAT_ID = os.getenv("CHAT_ID", "")
+MAX_ITEMS_PER_REGULATOR = 15      # максимум в одном сообщении на регулятора
+MAX_TOTAL_ITEMS = 60              # общий лимит, чтобы не улетать в flood/timeout
+HTTP_TIMEOUT = 25
+CONCURRENCY = 4
 
-# Ограничители, чтобы не словить flood/timeout
-HTTP_TIMEOUT_SEC = 25
-MAX_CONCURRENCY = 6
-MAX_DOC_TITLE_FETCH = 6  # сколько новых документов можно "дораскрыть" (подтянуть title со страницы)
-TELEGRAM_MAX_LEN = 3900  # чуть меньше 4096, чтобы не резало
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NPA-Monitor/1.0"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) npa-monitor-bot/1.0"
+
+IB_SYSTEM_PROMPT = """Ты — эксперт по информационной безопасности и регуляторике РФ.
+Твоя задача: отбирать ТОЛЬКО документы, которые относятся к ИБ/кибербезопасности/персональным данным/КИИ/криптографии/платежной безопасности/антифроду/ИБ в финсекторе.
+
+Верни СТРОГО JSON (без текста вокруг) формата:
+{
+  "relevant": true/false,
+  "score": 0..100,
+  "reason": "коротко (до 200 символов)",
+  "tags": ["...","..."]
+}
+
+Правила:
+- Если документ про финансы, статистику, РЕПО, вакансии, контакты, новости общего плана — irrelevant.
+- Если это проект НПА/приказ/указ/стандарт/методика/требования и есть связь с ИБ — relevant.
+"""
+
+@dataclass
+class Item:
+    regulator: str
+    title: str
+    url: str
+    published: Optional[str] = None
+    source_url: Optional[str] = None
 
 
-def now_msk_str() -> str:
-    # Без плясок с tz: просто покажем локальное время раннера как UTC+3 не гарантируем.
-    # Если хочешь строго МСК — добавим tzdata, но для мониторинга достаточно.
-    return datetime.now().strftime("%d.%m.%Y %H:%M")
-
-
-def sha1(s: str) -> str:
-    return hashlib.sha1(s.encode("utf-8")).hexdigest()
-
-
-def load_json(path: str, default: Any) -> Any:
+def load_json(path: str) -> Any:
     if not os.path.exists(path):
-        return default
+        return None
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -47,301 +61,373 @@ def save_json(path: str, data: Any) -> None:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def norm_url(u: str) -> str:
-    u = u.strip()
-    # убрать якоря
-    if "#" in u:
-        u = u.split("#", 1)[0]
-    return u
+def now_msk_str() -> str:
+    return datetime.now(tz=TZ_MSK).strftime("%d.%m.%Y %H:%M")
+
+
+def norm_space(s: str) -> str:
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def is_probably_navigation(title: str, url: str) -> bool:
+    t = title.lower()
+    bad_words = [
+        "контак", "карта сайта", "sitemap", "ваканс", "пресс-центр", "press",
+        "новости", "news", "обратиться", "о сайте", "en", "eng", "тел", "rutube", "vk.com", "ok.ru", "t.me/"
+    ]
+    if any(w in t for w in bad_words):
+        return True
+    if url.startswith("tel:"):
+        return True
+    return False
 
 
 async def fetch_text(session: aiohttp.ClientSession, url: str) -> str:
-    headers = {"User-Agent": USER_AGENT, "Accept-Language": "ru,en;q=0.8"}
-    for attempt in range(1, 4):
+    async with session.get(url, timeout=HTTP_TIMEOUT) as r:
+        r.raise_for_status()
+        return await r.text(errors="ignore")
+
+
+async def fetch_bytes(session: aiohttp.ClientSession, url: str) -> bytes:
+    async with session.get(url, timeout=HTTP_TIMEOUT) as r:
+        r.raise_for_status()
+        return await r.read()
+
+
+async def robust_fetch_text(session: aiohttp.ClientSession, url: str) -> str:
+    # backoff на 429/5xx и на сетевые ошибки
+    delays = [0, 2, 5, 10]
+    last_err = None
+    for d in delays:
+        if d:
+            await asyncio.sleep(d)
         try:
-            async with session.get(url, headers=headers, timeout=HTTP_TIMEOUT_SEC, allow_redirects=True) as r:
-                if r.status >= 400:
-                    raise RuntimeError(f"HTTP {r.status}")
-                return await r.text(errors="ignore")
+            return await fetch_text(session, url)
         except Exception as e:
-            if attempt == 3:
-                raise
-            await asyncio.sleep(1.2 * attempt)
-    raise RuntimeError("Failed to fetch")
+            last_err = e
+    raise RuntimeError(f"Failed to fetch {url}") from last_err
 
 
-def extract_pravo_document_links(html: str, base_url: str) -> List[str]:
+def extract_pravo_doc_links(html: str) -> List[str]:
     soup = BeautifulSoup(html, "lxml")
     links = []
-    for a in soup.select("a[href]"):
+    for a in soup.select("a[href*='/document/']"):
         href = a.get("href", "")
-        if not href:
-            continue
-        full = urljoin(base_url, href)
-        full = norm_url(full)
-
-        # Берём только реальные карточки документов
-        if re.search(r"publication\.pravo\.gov\.ru/document/\d{16,}", full):
-            links.append(full)
-
-    # дедуп
-    uniq = []
+        if href.startswith("/"):
+            href = "http://publication.pravo.gov.ru" + href
+        if href.startswith("http"):
+            links.append(href)
+    # уникализируем, сохраняем порядок
     seen = set()
-    for x in links:
-        if x not in seen:
-            seen.add(x)
-            uniq.append(x)
-    return uniq
+    out = []
+    for u in links:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
 
 
-async def try_get_pravo_title(session: aiohttp.ClientSession, doc_url: str) -> str:
-    # Пытаемся вытащить нормальный title с карточки документа
-    try:
-        html = await fetch_text(session, doc_url)
-        soup = BeautifulSoup(html, "lxml")
-
-        og = soup.find("meta", attrs={"property": "og:title"})
-        if og and og.get("content"):
-            t = og["content"].strip()
-            if t:
-                return t
-
-        h1 = soup.find("h1")
-        if h1:
-            t = h1.get_text(" ", strip=True)
-            if t:
-                return t
-
-        title = soup.find("title")
-        if title:
-            t = title.get_text(" ", strip=True)
-            t = re.sub(r"\s+", " ", t).strip()
-            if t:
-                return t
-    except Exception:
-        pass
-
-    # fallback
-    m = re.search(r"/document/(\d{16,})", doc_url)
-    return f"Документ {m.group(1) if m else 'publication.pravo.gov.ru'}"
-
-
-def extract_cbr_doc_links(html: str, base_url: str) -> List[Tuple[str, str]]:
-    """
-    Возвращает список (title, url) только для "документных" ссылок ЦБ:
-    - /Content/Document/File/...
-    - /Crosscut/LawActs/File/... (у тебя такое уже было)
-    """
+async def get_pravo_title(session: aiohttp.ClientSession, doc_url: str) -> str:
+    html = await robust_fetch_text(session, doc_url)
     soup = BeautifulSoup(html, "lxml")
-    items: List[Tuple[str, str]] = []
-
-    for a in soup.select("a[href]"):
-        href = a.get("href", "")
-        if not href:
-            continue
-        full = urljoin(base_url, href)
-        full = norm_url(full)
-
-        if (
-            "/Content/Document/File/" in full
-            or "/Crosscut/LawActs/File/" in full
-        ):
-            title = a.get_text(" ", strip=True)
-            title = re.sub(r"\s+", " ", title).strip()
-            if not title:
-                title = "Документ"
-            items.append((title, full))
-
-    # дедуп по url
-    uniq = []
-    seen = set()
-    for t, u in items:
-        if u not in seen:
-            seen.add(u)
-            uniq.append((t, u))
-    return uniq
+    # На pravo обычно есть meta og:title или h1
+    og = soup.find("meta", property="og:title")
+    if og and og.get("content"):
+        return norm_space(og["content"])
+    h1 = soup.find("h1")
+    if h1:
+        return norm_space(h1.get_text(" "))
+    title = soup.title.get_text(" ") if soup.title else "Документ"
+    return norm_space(title)
 
 
-def extract_regulation_rss(html: str) -> List[Tuple[str, str]]:
-    # regulation.gov rss — это xml
-    soup = BeautifulSoup(html, "xml")
-    out: List[Tuple[str, str]] = []
+def parse_rss_items(xml_text: str) -> List[Tuple[str, str, Optional[str]]]:
+    # возвращает (title, link, pubDate)
+    soup = BeautifulSoup(xml_text, "xml")
+    out = []
     for it in soup.find_all("item"):
-        title = it.title.get_text(strip=True) if it.title else "Проект"
-        link = it.link.get_text(strip=True) if it.link else ""
+        title = norm_space(it.title.get_text()) if it.title else "Документ"
+        link = norm_space(it.link.get_text()) if it.link else ""
+        pub = norm_space(it.pubDate.get_text()) if it.pubDate else None
         if link:
-            out.append((title, norm_url(link)))
-    # дедуп
-    uniq = []
-    seen = set()
-    for t, u in out:
-        if u not in seen:
+            out.append((title, link, pub))
+    return out
+
+
+async def collect_items(session: aiohttp.ClientSession, src: Dict[str, Any]) -> List[Item]:
+    reg = src["regulator"]
+    typ = src["type"]
+    url = src["url"]
+
+    items: List[Item] = []
+
+    if typ == "pravo_block":
+        html = await robust_fetch_text(session, url)
+        doc_links = extract_pravo_doc_links(html)[:MAX_ITEMS_PER_REGULATOR]
+        for dl in doc_links:
+            try:
+                t = await get_pravo_title(session, dl)
+            except Exception:
+                t = "Документ"
+            items.append(Item(regulator=reg, title=t, url=dl, source_url=url))
+        return items
+
+    if typ == "pravo_rss":
+        # общий RSS, дальше фильтруем по block через url, если возможно
+        # publication.pravo.gov.ru/rss — отдаёт общий поток; block может не поддерживаться стабильно
+        # поэтому берём RSS и фильтруем по наличию сегмента /document/ и по ключам regulator в тексте заголовка
+        xml = await robust_fetch_text(session, url)
+        rss = parse_rss_items(xml)
+        # лёгкая фильтрация: оставим только документы, остальное отрежем
+        for title, link, pub in rss:
+            if "/document/" not in link:
+                continue
+            items.append(Item(regulator=reg, title=title, url=link, published=pub, source_url=url))
+        return items[:MAX_ITEMS_PER_REGULATOR]
+
+    if typ == "cbr_rss":
+        xml = await robust_fetch_text(session, url)
+        rss = parse_rss_items(xml)
+        for title, link, pub in rss[:MAX_ITEMS_PER_REGULATOR]:
+            items.append(Item(regulator=reg, title=title, url=link, published=pub, source_url=url))
+        return items
+
+    if typ == "cbr_html":
+        html = await robust_fetch_text(session, url)
+        soup = BeautifulSoup(html, "lxml")
+        # Берём ссылки на файлы/документы и страницы проекта
+        links = []
+        for a in soup.select("a[href]"):
+            href = a["href"]
+            if not href:
+                continue
+            if href.startswith("/"):
+                href = "https://cbr.ru" + href
+            text = norm_space(a.get_text(" "))
+            if not text:
+                continue
+            if any(x in href.lower() for x in ["/content/document/file/", "/project_na", "/crosscut/lawacts/file/"]):
+                links.append((text, href))
+        seen = set()
+        for t, u in links:
+            if u in seen or is_probably_navigation(t, u):
+                continue
             seen.add(u)
-            uniq.append((t, u))
-    return uniq
+            items.append(Item(regulator=reg, title=t, url=u, source_url=url))
+            if len(items) >= MAX_ITEMS_PER_REGULATOR:
+                break
+        return items
+
+    if typ == "regulation_rss":
+        xml = await robust_fetch_text(session, url)
+        rss = parse_rss_items(xml)
+        for title, link, pub in rss[:MAX_ITEMS_PER_REGULATOR]:
+            items.append(Item(regulator=reg, title=title, url=link, published=pub, source_url=url))
+        return items
+
+    if typ == "nspk_security":
+        html = await robust_fetch_text(session, url)
+        soup = BeautifulSoup(html, "lxml")
+        links = []
+        for a in soup.select("a[href]"):
+            href = a["href"]
+            text = norm_space(a.get_text(" "))
+            if href.startswith("/"):
+                href = "https://www.nspk.ru" + href
+            if not href.startswith("http"):
+                continue
+            if is_probably_navigation(text, href):
+                continue
+            # оставляем только security-разделы и документы/страницы стандартов
+            if "/cards-mir/security" in href or "pcidss" in href.lower() or "pci" in text.lower():
+                links.append((text or "Документ", href))
+        seen = set()
+        for t, u in links:
+            if u in seen:
+                continue
+            seen.add(u)
+            items.append(Item(regulator=reg, title=t, url=u, source_url=url))
+            if len(items) >= MAX_ITEMS_PER_REGULATOR:
+                break
+        return items
+
+    if typ == "rosstandard":
+        html = await robust_fetch_text(session, url)
+        soup = BeautifulSoup(html, "lxml")
+        links = []
+        for a in soup.select("a[href]"):
+            href = a["href"]
+            text = norm_space(a.get_text(" "))
+            if href.startswith("/"):
+                href = "https://www.rst.gov.ru" + href
+            if not href.startswith("http"):
+                continue
+            if is_probably_navigation(text, href):
+                continue
+            # на старте берём только то, что похоже на документы/новости/стандарты
+            if any(k in href.lower() for k in ["gost", "standard", "docs", "document", "news"]):
+                links.append((text or "Документ", href))
+        seen = set()
+        for t, u in links:
+            if u in seen:
+                continue
+            seen.add(u)
+            items.append(Item(regulator=reg, title=t, url=u, source_url=url))
+            if len(items) >= MAX_ITEMS_PER_REGULATOR:
+                break
+        return items
+
+    # неизвестный тип
+    return items
 
 
-def format_regulator_message(regulator: str, items: List[Tuple[str, str]]) -> List[str]:
-    """
-    Возвращает список сообщений (если надо порезать по длине).
-    """
-    header = f"Мониторинг НПА\nРегулятор: {regulator}\nДата: {now_msk_str()}\nНовые публикации: {len(items)}\n"
+def item_key(it: Item) -> str:
+    return it.url
+
+
+def load_state() -> Dict[str, Any]:
+    state = load_json(STATE_FILE)
+    if not isinstance(state, dict):
+        return {"seen": {}}
+    state.setdefault("seen", {})
+    return state
+
+
+def mark_seen(state: Dict[str, Any], it: Item) -> None:
+    reg = it.regulator
+    state["seen"].setdefault(reg, {})
+    state["seen"][reg][item_key(it)] = {"ts": datetime.now(timezone.utc).isoformat()}
+
+
+def is_seen(state: Dict[str, Any], it: Item) -> bool:
+    reg = it.regulator
+    return item_key(it) in state.get("seen", {}).get(reg, {})
+
+
+async def tg_send(session: aiohttp.ClientSession, token: str, chat_id: str, text: str) -> None:
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
+    async with session.post(url, json=payload, timeout=HTTP_TIMEOUT) as r:
+        r.raise_for_status()
+
+
+def build_message(regulator: str, items: List[Item]) -> str:
     lines = []
-    for i, (t, u) in enumerate(items, 1):
-        # аккуратно: чтобы не было "пустых названий"
-        t = re.sub(r"\s+", " ", (t or "").strip())
-        if not t:
-            t = "Документ"
-        lines.append(f"{i}) {t} — {u}")
-
-    full = header + "\n" + "\n".join(lines)
-
-    if len(full) <= TELEGRAM_MAX_LEN:
-        return [full]
-
-    # режем на части
-    msgs = []
-    cur = header + "\n"
-    for ln in lines:
-        if len(cur) + len(ln) + 1 > TELEGRAM_MAX_LEN:
-            msgs.append(cur.rstrip())
-            cur = header + "\n"
-        cur += ln + "\n"
-    if cur.strip():
-        msgs.append(cur.rstrip())
-    return msgs
+    lines.append("Мониторинг НПА (ИБ)")
+    lines.append(f"Регулятор: {regulator}")
+    lines.append(f"Дата: {now_msk_str()}")
+    lines.append(f"Новые публикации: {len(items)}")
+    lines.append("")
+    for i, it in enumerate(items, 1):
+        lines.append(f"{i}) {it.title} — {it.url}")
+    return "\n".join(lines)
 
 
-async def tg_send(session: aiohttp.ClientSession, text: str) -> None:
-    if not BOT_TOKEN or not CHAT_ID:
-        return
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": text,
-        "disable_web_page_preview": True,
-    }
-    async with session.post(url, json=payload, timeout=HTTP_TIMEOUT_SEC) as r:
-        if r.status >= 400:
-            body = await r.text(errors="ignore")
-            raise RuntimeError(f"Telegram sendMessage HTTP {r.status}: {body[:200]}")
+def gigachat_filter(items: List[Item], credentials: str) -> List[Tuple[Item, Dict[str, Any]]]:
+    # Синхронно, но мало элементов (мы режем лимитами). Для GitHub Actions это ок.
+    out: List[Tuple[Item, Dict[str, Any]]] = []
+    with GigaChat(credentials=credentials, verify_ssl_certs=False) as giga:
+        for it in items:
+            # минимальный контекст, чтобы не тратить токены
+            user = {
+                "title": it.title,
+                "url": it.url,
+                "regulator": it.regulator
+            }
+            chat = Chat(messages=[
+                Messages(role=MessagesRole.SYSTEM, content=IB_SYSTEM_PROMPT),
+                Messages(role=MessagesRole.USER, content=json.dumps(user, ensure_ascii=False))
+            ])
+            try:
+                resp = giga.chat(chat)
+                raw = resp.choices[0].message.content.strip()
+                data = json.loads(raw)
+                if isinstance(data, dict):
+                    out.append((it, data))
+            except Exception:
+                # если ИИ упал — считаем нерелевантным, чтобы не слать мусор
+                continue
+
+    # оставляем только relevant + сортируем по score
+    rel = [(it, meta) for it, meta in out if meta.get("relevant") is True]
+    rel.sort(key=lambda x: int(x[1].get("score", 0)), reverse=True)
+    return rel
 
 
-async def run_once() -> int:
-    sources = load_json(SOURCES_FILE, [])
-    state = load_json(STATE_FILE, {"seen": {}, "last_errors": {}})
+async def run_once() -> None:
+    bot_token = os.getenv("BOT_TOKEN", "").strip()
+    chat_id = os.getenv("CHAT_ID", "").strip()
+    giga_credentials = os.getenv("GIGACHAT_CREDENTIALS", "").strip()
 
-    sem = asyncio.Semaphore(MAX_CONCURRENCY)
-    errors: List[Tuple[str, str, str]] = []  # regulator, url, reason
-    notifications: List[Tuple[str, List[Tuple[str, str]]]] = []  # regulator -> items
+    if not bot_token or not chat_id:
+        raise RuntimeError("BOT_TOKEN/CHAT_ID are missing")
+    if not giga_credentials:
+        raise RuntimeError("GIGACHAT_CREDENTIALS is missing")
 
-    async with aiohttp.ClientSession() as session:
+    sources = load_json(SOURCES_FILE)
+    if not isinstance(sources, list):
+        raise RuntimeError("sources.json invalid")
 
-        async def process_source(src: Dict[str, Any]) -> None:
-            regulator = src.get("regulator", "Неизвестно")
-            kind = src.get("kind", "html_links")
-            urls = src.get("urls", [])
-            max_items = int(src.get("max_items", 15))
+    state = load_state()
 
-            src_seen: set = set(state["seen"].get(regulator, []))
+    connector = aiohttp.TCPConnector(ssl=False, limit=CONCURRENCY)
+    timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT)
+    headers = {"User-Agent": UA, "Accept": "*/*"}
 
-            all_new: List[Tuple[str, str]] = []
+    all_new: List[Item] = []
+    errors: List[str] = []
 
-            for url in urls:
-                url = norm_url(url)
-                try:
-                    async with sem:
-                        html = await fetch_text(session, url)
+    async with aiohttp.ClientSession(connector=connector, timeout=timeout, headers=headers) as session:
+        sem = asyncio.Semaphore(CONCURRENCY)
 
-                    if kind in ("pravo_block", "pravo_foiv"):
-                        doc_links = extract_pravo_document_links(html, url)
-                        doc_links = doc_links[:max_items]
+        async def one_source(src: Dict[str, Any]) -> None:
+            reg = src.get("regulator", "Источник")
+            url = src.get("url", "")
+            try:
+                async with sem:
+                    items = await collect_items(session, src)
+                # фильтр на “навигацию”
+                items = [it for it in items if not is_probably_navigation(it.title, it.url)]
+                # только новые
+                new_items = [it for it in items if not is_seen(state, it)]
+                for it in new_items:
+                    all_new.append(it)
+            except Exception as e:
+                errors.append(f"{reg}: {url} -> {type(e).__name__}: {e}")
 
-                        # Для части ссылок подтянем нормальный title, чтобы было не "Документ"
-                        new_links = [u for u in doc_links if u not in src_seen]
-                        titled: List[Tuple[str, str]] = []
+        await asyncio.gather(*(one_source(s) for s in sources))
 
-                        for u in new_links[:MAX_DOC_TITLE_FETCH]:
-                            t = await try_get_pravo_title(session, u)
-                            titled.append((t, u))
-                        for u in new_links[MAX_DOC_TITLE_FETCH:]:
-                            titled.append(("Документ", u))
+        # ограничим общий поток, иначе будет flood и timeout
+        all_new = all_new[:MAX_TOTAL_ITEMS]
 
-                        all_new.extend(titled)
+        # группируем по регулятору -> фильтруем ИИ
+        by_reg: Dict[str, List[Item]] = {}
+        for it in all_new:
+            by_reg.setdefault(it.regulator, []).append(it)
 
-                    elif kind == "cbr_docs":
-                        items = extract_cbr_doc_links(html, url)
-                        items = items[:max_items]
-                        for t, u in items:
-                            if u not in src_seen:
-                                all_new.append((t, u))
+        for regulator, items in by_reg.items():
+            # AI отбор
+            filtered = gigachat_filter(items, giga_credentials)
+            final_items = [it for it, meta in filtered][:MAX_ITEMS_PER_REGULATOR]
 
-                    elif kind == "regulation_rss":
-                        items = extract_regulation_rss(html)
-                        items = items[:max_items]
-                        for t, u in items:
-                            if u not in src_seen:
-                                all_new.append((t, u))
+            if not final_items:
+                # ничего ИБ-релевантного — молчим
+                continue
 
-                    else:
-                        # fallback: не используем сейчас, чтобы не тащить мусор
-                        pass
+            # отмечаем seen
+            for it in final_items:
+                mark_seen(state, it)
 
-                except Exception as e:
-                    errors.append((regulator, url, f"{type(e).__name__}: {e}"))
+            msg = build_message(regulator, final_items)
+            await tg_send(session, bot_token, chat_id, msg)
 
-            # обновим state и подготовим уведомление
-            if all_new:
-                # дедуп внутри источника
-                uniq = []
-                seen_u = set()
-                for t, u in all_new:
-                    if u not in seen_u:
-                        seen_u.add(u)
-                        uniq.append((t, u))
-
-                notifications.append((regulator, uniq))
-
-                # записываем что увидели (храним ограниченно, чтобы state не разрастался)
-                new_seen = list(dict.fromkeys(list(src_seen) + [u for _, u in uniq]))
-                state["seen"][regulator] = new_seen[-200:]
-
-        # 1) обработка источников
-        await asyncio.gather(*(process_source(s) for s in sources))
-
-        # 2) отправка уведомлений: один регулятор = одно(или несколько по длине) сообщение
-        # сортируем, чтобы порядок был стабильный
-        notifications.sort(key=lambda x: x[0])
-
-        for regulator, items in notifications:
-            msgs = format_regulator_message(regulator, items)
-            for m in msgs:
-                await tg_send(session, m)
-                await asyncio.sleep(0.7)  # анти-flood
-
-        # 3) ошибки: агрегируем в одно сообщение и не повторяем одинаковые
+        # ошибки — одним сообщением, но без спама
         if errors:
-            # сгруппируем
-            err_lines = []
-            for reg, url, reason in errors:
-                err_lines.append(f"- {reg}: {url}\n  Причина: {reason}")
-            err_text = "Мониторинг НПА\nОшибки источников:\n" + "\n".join(err_lines)
-
-            err_hash = sha1(err_text)
-            prev_hash = state.get("last_errors", {}).get("hash", "")
-            if err_hash != prev_hash:
-                # отправим один раз на изменение
-                try:
-                    await tg_send(session, err_text[:TELEGRAM_MAX_LEN])
-                except Exception:
-                    pass
-                state["last_errors"] = {"hash": err_hash, "at": now_msk_str()}
+            err_text = "Мониторинг НПА (ИБ)\nОшибки источников:\n" + "\n".join(errors[:15])
+            await tg_send(session, bot_token, chat_id, err_text)
 
     save_json(STATE_FILE, state)
-    return 0
 
 
 if __name__ == "__main__":
-    # Важно: GitHub Actions запускает это как одиночный job.
-    # Поэтому делаем один проход и выходим.
     asyncio.run(run_once())
