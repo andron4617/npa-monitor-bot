@@ -589,16 +589,17 @@
       "e57a2a3966c8f9aef440301babec67aab580ba70"
     ],
     "Проекты НПА": [
-      "https://regulation.gov.ru/projects/165461",
-      "https://regulation.gov.ru/projects/165460",
-      "https://regulation.gov.ru/projects/165459",
       "https://regulation.gov.ru/projects/165458",
-      "https://regulation.gov.ru/projects/165457",
       "https://regulation.gov.ru/projects/165456",
+      "https://regulation.gov.ru/projects/165460",
       "https://regulation.gov.ru/projects/165455",
+      "https://regulation.gov.ru/projects/165449",
       "https://regulation.gov.ru/projects/165452",
+      "https://regulation.gov.ru/projects/165461",
+      "https://regulation.gov.ru/projects/165459",
+      "https://regulation.gov.ru/projects/165457",
       "https://regulation.gov.ru/projects/165451",
-      "https://regulation.gov.ru/projects/165449"
+      "https://regulation.gov.ru/projects/165463"
     ],
     "ЦБ РФ": [
       "https://cbr.ru/Crosscut/LawActs/File/12142",
@@ -681,12 +682,15 @@
       "http://publication.pravo.gov.ru/document/0001202409260001"
     ],
     "Указы Президента РФ": [
-      "http://publication.pravo.gov.ru/document/0001202602160003",
-      "http://publication.pravo.gov.ru/document/0001202602160011",
-      "http://publication.pravo.gov.ru/document/0001202602160010",
       "http://publication.pravo.gov.ru/document/0001202602160009",
       "http://publication.pravo.gov.ru/document/0001202602160001",
-      "http://publication.pravo.gov.ru/document/0001202602160002"
+      "http://publication.pravo.gov.ru/document/0001202602160011",
+      "http://publication.pravo.gov.ru/document/0001202602160010",
+      "http://publication.pravo.gov.ru/document/0001202602160002",
+      "http://publication.pravo.gov.ru/document/0001202602160003",
+      "http://publication.pravo.gov.ru/document/0001202602160014",
+      "http://publication.pravo.gov.ru/document/0001202602160013",
+      "http://publication.pravo.gov.ru/document/0001202602160012"
     ]
   },
   "updated_at": "16.02.2026 09:56"
