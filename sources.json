@@ -1,69 +1,62 @@
 [
   {
-    "regulator": "Указы Президента РФ",
-    "kind": "pravo_block",
-    "urls": [
-      "http://publication.pravo.gov.ru/documents/daily?block=president",
-      "http://publication.pravo.gov.ru/documents/weekly?block=president"
-    ],
-    "max_items": 15
+    "regulator": "Президент РФ",
+    "type": "pravo_rss",
+    "url": "http://publication.pravo.gov.ru/rss",
+    "filters": { "block": "president" }
   },
   {
     "regulator": "Правительство РФ",
-    "kind": "pravo_block",
-    "urls": [
-      "http://publication.pravo.gov.ru/documents/daily?block=government",
-      "http://publication.pravo.gov.ru/documents/weekly?block=government"
-    ],
-    "max_items": 15
+    "type": "pravo_rss",
+    "url": "http://publication.pravo.gov.ru/rss",
+    "filters": { "block": "government" }
   },
   {
-    "regulator": "ЦБ РФ",
-    "kind": "cbr_docs",
-    "urls": [
-      "https://cbr.ru/na/",
-      "https://cbr.ru/project_na"
-    ],
-    "max_items": 20
+    "regulator": "Банк России",
+    "type": "cbr_rss",
+    "url": "https://cbr.ru/rss/RssNews"
   },
+  {
+    "regulator": "Банк России (проекты НПА)",
+    "type": "cbr_html",
+    "url": "https://cbr.ru/project_na/"
+  },
+
   {
     "regulator": "ФСТЭК",
-    "kind": "pravo_foiv",
-    "urls": [
-      "http://publication.pravo.gov.ru/documents/block/foiv041"
-    ],
-    "max_items": 15
+    "type": "pravo_block",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv041"
   },
   {
     "regulator": "ФСБ",
-    "kind": "pravo_foiv",
-    "urls": [
-      "http://publication.pravo.gov.ru/documents/block/foiv055"
-    ],
-    "max_items": 15
+    "type": "pravo_block",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv055"
   },
   {
     "regulator": "Минцифры",
-    "kind": "pravo_foiv",
-    "urls": [
-      "http://publication.pravo.gov.ru/documents/block/foiv290"
-    ],
-    "max_items": 15
+    "type": "pravo_block",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv290"
   },
   {
     "regulator": "Роскомнадзор",
-    "kind": "pravo_foiv",
-    "urls": [
-      "http://publication.pravo.gov.ru/documents/block/foiv291"
-    ],
-    "max_items": 15
+    "type": "pravo_block",
+    "url": "http://publication.pravo.gov.ru/documents/block/foiv291"
   },
+
   {
     "regulator": "Проекты НПА",
-    "kind": "regulation_rss",
-    "urls": [
-      "https://regulation.gov.ru/api/public/Rss/"
-    ],
-    "max_items": 10
+    "type": "regulation_rss",
+    "url": "https://regulation.gov.ru/api/public/Rss/"
+  },
+
+  {
+    "regulator": "НСПК",
+    "type": "nspk_security",
+    "url": "https://www.nspk.ru/cards-mir/security"
+  },
+  {
+    "regulator": "Росстандарт",
+    "type": "rosstandard",
+    "url": "https://www.rst.gov.ru/portal/gost/"
   }
 ]
