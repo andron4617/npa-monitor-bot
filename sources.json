@@ -1,56 +1,66 @@
 [
   {
-    "id": "president_daily",
     "regulator": "Указы Президента РФ",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/daily?block=president"
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/daily?block=president",
+      "http://publication.pravo.gov.ru/documents/weekly?block=president"
+    ]
   },
   {
-    "id": "government_daily",
     "regulator": "Правительство РФ",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/daily?block=government"
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/daily?block=government",
+      "http://publication.pravo.gov.ru/documents/weekly?block=government"
+    ]
   },
   {
-    "id": "fstec_block",
-    "regulator": "ФСТЭК России",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv041"
+    "regulator": "ФСТЭК",
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/block/foiv041"
+    ]
   },
   {
-    "id": "fsb_block",
-    "regulator": "ФСБ России",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv055"
+    "regulator": "ФСБ",
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/block/foiv055"
+    ]
   },
   {
-    "id": "mincifry_block",
-    "regulator": "Минцифры России",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv290"
+    "regulator": "Минцифры",
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/block/foiv290"
+    ]
   },
   {
-    "id": "rkn_block",
     "regulator": "Роскомнадзор",
-    "type": "pravo_block",
-    "url": "http://publication.pravo.gov.ru/documents/block/foiv291"
+    "urls": [
+      "http://publication.pravo.gov.ru/documents/block/foiv291"
+    ]
   },
   {
-    "id": "regulation_rss",
     "regulator": "Проекты НПА",
-    "type": "rss",
-    "url": "https://regulation.gov.ru/api/public/Rss/"
+    "urls": [
+      "https://regulation.gov.ru/api/public/Rss/"
+    ]
+  },
+
+  {
+    "regulator": "Банк России",
+    "urls": [
+      "https://cbr.ru/project_na"
+    ]
+  },
+
+  {
+    "regulator": "НСПК",
+    "urls": [
+      "https://www.nspk.ru/cards-mir/security/security-program"
+    ]
   },
   {
-    "id": "cbr_acts",
-    "regulator": "Банк России",
-    "type": "html_links",
-    "url": "https://cbr.ru/na/"
-  },
-  {
-    "id": "cbr_is",
-    "regulator": "Банк России",
-    "type": "html_links",
-    "url": "https://cbr.ru/information_security/"
+    "regulator": "Росстандарт",
+    "urls": [
+      "https://www.rst.gov.ru/portal/gost/"
+    ]
   }
 ]
