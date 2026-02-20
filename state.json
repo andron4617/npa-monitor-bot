@@ -34,7 +34,8 @@
       "http://publication.pravo.gov.ru/document/0001202601230008": 1771264721,
       "http://publication.pravo.gov.ru/document/0001202601270007": 1771264721,
       "http://publication.pravo.gov.ru/document/0001202602030017": 1771264721,
-      "http://publication.pravo.gov.ru/document/0001202602190002": 1771515681
+      "http://publication.pravo.gov.ru/document/0001202602190002": 1771515681,
+      "http://publication.pravo.gov.ru/document/0001202602200025": 1771601538
     },
     "НСПК": {
       "https://www.nspk.ru/_nuxt/5ZoDVnF9.js": 1771264741,
@@ -195,7 +196,12 @@
       "http://publication.pravo.gov.ru/document/0001202602200001": 1771580025,
       "http://publication.pravo.gov.ru/document/0001202602200002": 1771580025,
       "http://publication.pravo.gov.ru/document/0001202602200003": 1771580025,
-      "http://publication.pravo.gov.ru/document/0001202602200004": 1771580025
+      "http://publication.pravo.gov.ru/document/0001202602200004": 1771580025,
+      "http://publication.pravo.gov.ru/document/0001202602200009": 1771601506,
+      "http://publication.pravo.gov.ru/document/0001202602200011": 1771601506,
+      "http://publication.pravo.gov.ru/document/0001202602200023": 1771601506,
+      "http://publication.pravo.gov.ru/document/0001202602200026": 1771601506,
+      "http://publication.pravo.gov.ru/document/0001202602200027": 1771601506
     },
     "ФСБ": {
       "http://publication.pravo.gov.ru/document/0001202503280012": 1771264710,
