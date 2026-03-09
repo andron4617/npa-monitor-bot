@@ -43,24 +43,10 @@
       "https://regulation.gov.ru/api/public/Rss/"
     ]
   },
-
   {
     "regulator": "Банк России",
     "urls": [
       "https://cbr.ru/project_na"
-    ]
-  },
-
-  {
-    "regulator": "НСПК",
-    "urls": [
-      "https://www.nspk.ru/cards-mir/security/security-program"
-    ]
-  },
-  {
-    "regulator": "Росстандарт",
-    "urls": [
-      "https://www.rst.gov.ru/portal/gost/"
     ]
   }
 ]
