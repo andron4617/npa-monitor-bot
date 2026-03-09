@@ -164,9 +164,9 @@ async def fetch_text(session: aiohttp.ClientSession, url: str) -> str:
     raise RuntimeError(str(last_err))
 
 
-def extract_links_from_html(base_url: str, html: str) -> List[str]:
+def extract_links_from_html(base_url: str, page_html: str) -> List[str]:
     links = []
-    for m in re.finditer(r'href\s*=\s*["\']([^"\']+)["\']', html, flags=re.IGNORECASE):
+    for m in re.finditer(r'href\s*=\s*["\']([^"\']+)["\']', page_html, flags=re.IGNORECASE):
         href = m.group(1).strip()
         if not href:
             continue
@@ -222,14 +222,14 @@ def clean_title(raw_title: str) -> str:
     return title[:240] if title else "Документ"
 
 
-def extract_text_preview_from_html(html: str) -> str:
-    html = re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
-    html = re.sub(r"(?is)<style.*?>.*?</style>", " ", html)
-    html = re.sub(r"(?is)<head.*?>.*?</head>", " ", html)
-    html = re.sub(r"(?is)<[^>]+>", " ", html)
-    html = html_lib.unescape(html)
-    html = normalize_spaces(html)
-    return html[:3000]
+def extract_text_preview_from_html(page_html: str) -> str:
+    page_html = re.sub(r"(?is)<script.*?>.*?</script>", " ", page_html)
+    page_html = re.sub(r"(?is)<style.*?>.*?</style>", " ", page_html)
+    page_html = re.sub(r"(?is)<head.*?>.*?</head>", " ", page_html)
+    page_html = re.sub(r"(?is)<[^>]+>", " ", page_html)
+    page_html = html_lib.unescape(page_html)
+    page_html = normalize_spaces(page_html)
+    return page_html[:3000]
 
 
 async def title_and_preview_for_doc(session: aiohttp.ClientSession, url: str) -> Tuple[str, str]:
@@ -337,23 +337,60 @@ async def analyze_item_with_openai(
         fallback["ai_debug"] = "OPENAI_API_KEY не задан"
         return fallback
 
-    preview = item.content_preview[:2000] if item.content_preview else ""
+    preview = item.content_preview[:2200] if item.content_preview else ""
 
     prompt = f"""
-Ты анализируешь нормативную публикацию для Telegram-бота мониторинга.
+Ты анализируешь нормативную публикацию для Telegram-бота мониторинга НПА.
 
+ТВОЯ ЗАДАЧА:
+1. Определить РЕЛЕВАНТНОСТЬ ИМЕННО ДЛЯ ИНФОРМАЦИОННОЙ БЕЗОПАСНОСТИ, а не общую важность документа.
+2. Дать краткое описание только по доступным данным, без догадок.
+
+СЧИТАЙ ВЫСОКОЙ ИБ-РЕЛЕВАНТНОСТЬЮ только документы, которые прямо относятся к одному или нескольким направлениям:
+- защита информации
+- информационная безопасность
+- кибербезопасность
+- криптография / шифрование / СКЗИ
+- КИИ / критическая информационная инфраструктура
+- безопасность ГИС, ИС, ИСПДн, сетей и связи
+- персональные данные и требования к их защите
+- требования к операторам связи, ОРИ, цифровым платформам, если это влияет на безопасность, хранение, доступ, контроль, надзор
+- обязательные технические, организационные или контрольные меры в ИТ/ИБ
+
+СЧИТАЙ НИЗКОЙ ИБ-РЕЛЕВАНТНОСТЬЮ документы про:
+- кадровые назначения
+- состав коллегий, комиссий и советов
+- служебное поведение
+- конфликт интересов
+- доходы, расходы, имущество
+- соцгарантии
+- внутренние оргвопросы
+- гражданскую оборону без прямой ИБ-составляющей
+- конкурсы на госслужбу
+- образовательные и вступительные процедуры
+- общую административную деятельность, если она не содержит требований по ИБ
+
+СЧИТАЙ "НЕЯСНО", если из текста и заголовка нельзя уверенно сделать вывод.
+
+НЕ ДОДУМЫВАЙ:
+- не придумывай содержание документа, если его нет в доступном тексте
+- не называй документ ИБ-релевантным только потому, что он из ФСТЭК, ФСБ, Минцифры, РКН или ЦБ
+- если данных мало, так и пиши
+
+ИСХОДНЫЕ ДАННЫЕ:
 Регулятор: {regulator}
 Заголовок: {item.title}
 Ссылка: {item.url}
 Текст:
 {preview if preview else "Нет доступного текста, есть только заголовок и ссылка."}
 
-Верни ответ СТРОГО в JSON без пояснений и markdown:
+ТРЕБОВАНИЯ К ОТВЕТУ:
+Верни ответ СТРОГО в JSON без markdown и без пояснений:
 
 {{
   "relevance": "высокая|средняя|низкая|неясно",
-  "summary": "1-2 предложения по сути документа на русском языке",
-  "title": "короткий понятный заголовок"
+  "summary": "1-2 предложения только по фактам из доступного текста",
+  "title": "короткий понятный заголовок без фантазий"
 }}
 """.strip()
 
@@ -381,8 +418,11 @@ async def analyze_item_with_openai(
             return fallback
 
         title = clean_title(str(data.get("title", item.title)).strip()) or item.title
-        relevance = str(data.get("relevance", "неясно")).strip()
+        relevance = str(data.get("relevance", "неясно")).strip().lower()
         summary = normalize_spaces(str(data.get("summary", "Описание не получено")).strip())
+
+        if relevance not in {"высокая", "средняя", "низкая", "неясно"}:
+            relevance = "неясно"
 
         return {
             "relevance": relevance,
