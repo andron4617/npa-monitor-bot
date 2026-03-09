@@ -1,38 +1,45 @@
 import asyncio
+import html as html_lib
 import json
 import os
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
 from aiohttp import ClientTimeout
+from openai import AsyncOpenAI
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 CHAT_ID = os.getenv("CHAT_ID", "").strip()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 
 SOURCES_FILE = "sources.json"
 STATE_FILE = "state.json"
 
 # ---- Настройки ----
-MAX_ITEMS_PER_REGULATOR = 15
+MAX_ITEMS_PER_REGULATOR = 10
 HTTP_TIMEOUT_SECONDS = 25
 HTTP_RETRIES = 3
-HTTP_RETRY_BACKOFF = 1.6  # множитель
-TELEGRAM_MAX_CHARS = 3500  # безопасно < 4096
+HTTP_RETRY_BACKOFF = 1.6
+TELEGRAM_MAX_CHARS = 3500
 TELEGRAM_RETRIES = 5
+
+OPENAI_MODEL = "gpt-5.4"
+OPENAI_TIMEOUT_SECONDS = 40
+OPENAI_MAX_CONCURRENT = 3
 
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 )
 
-# грубая фильтрация "мусорных" ссылок без ИИ/ключевых слов (как ты просил)
 DROP_URL_PATTERNS = [
     r"^tel:",
+    r"^mailto:",
     r"vk\.com/",
     r"t\.me/",
     r"youtube\.com/",
@@ -46,7 +53,7 @@ DROP_URL_PATTERNS = [
     r"/vacancies",
     r"/press",
     r"/press-center",
-    r"/news(?!/)",         # оставить /news/<id> если вдруг, но выкинуть /news/ как раздел
+    r"/news(?!/)",
     r"/Localization/",
     r"/SwitchLanguage",
     r"/help",
@@ -55,8 +62,14 @@ DROP_URL_PATTERNS = [
     r"/calendar/",
     r"/search/",
     r"/documents/(daily|weekly|monthly)\b",
-    r"/documents/block/[^?]+(\?index=\d+)?$",  # страницы пагинации блоков (это не документ)
+    r"/documents/block/[^?]+(\?index=\d+)?$",
+    r"/_nuxt/",
 ]
+
+DROP_EXTENSIONS = {
+    ".js", ".css", ".map", ".png", ".jpg", ".jpeg", ".gif", ".svg",
+    ".webp", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".json", ".xml"
+}
 
 DOC_URL_PATTERNS = [
     r"https?://publication\.pravo\.gov\.ru/document/\d+",
@@ -65,7 +78,6 @@ DOC_URL_PATTERNS = [
     r"https?://cbr\.ru/Content/Document/File/\d+/.+",
     r"https?://regulation\.gov\.ru/projects/\d+",
     r"https?://www\.rst\.gov\.ru/portal/gost/.*",
-    r"https?://www\.nspk\.ru/.*",
     r"https?://fstec\.ru/.*",
 ]
 
@@ -77,21 +89,29 @@ REGULATION_PROJECT_RE = re.compile(r"https?://regulation\.gov\.ru/projects/\d+")
 class Item:
     title: str
     url: str
+    content_preview: str = ""
 
 
 def now_msk_str() -> str:
-    # MSK = UTC+3
-    msk = timezone.utc
-    # проще: взять UTC и прибавить 3 часа для отображения
-    ts = datetime.utcnow().timestamp() + 3 * 3600
-    return datetime.fromtimestamp(ts).strftime("%d.%m.%Y %H:%M")
+    return datetime.now().strftime("%d.%m.%Y %H:%M")
+
+
+def normalize_spaces(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def is_drop_url(url: str) -> bool:
     u = url.strip()
+
     for p in DROP_URL_PATTERNS:
         if re.search(p, u, flags=re.IGNORECASE):
             return True
+
+    path = urlparse(u).path.lower()
+    for ext in DROP_EXTENSIONS:
+        if path.endswith(ext):
+            return True
+
     return False
 
 
@@ -115,7 +135,7 @@ def load_sources() -> List[Dict[str, Any]]:
     data = load_json_file(SOURCES_FILE, [])
     if not isinstance(data, list):
         raise ValueError("sources.json должен быть массивом")
-    # минимальная валидация
+
     for i, s in enumerate(data):
         if not isinstance(s, dict) or "regulator" not in s or "urls" not in s:
             raise ValueError(f"Неверная запись в sources.json (index={i})")
@@ -128,8 +148,7 @@ async def fetch_text(session: aiohttp.ClientSession, url: str) -> str:
     last_err = None
     for attempt in range(1, HTTP_RETRIES + 1):
         try:
-            async with session.get(url) as r:
-                # 429 и 5xx — retry
+            async with session.get(url, allow_redirects=True) as r:
                 if r.status == 429 or 500 <= r.status <= 599:
                     txt = await r.text(errors="ignore")
                     raise RuntimeError(f"HTTP {r.status}: {txt[:300]}")
@@ -147,7 +166,6 @@ async def fetch_text(session: aiohttp.ClientSession, url: str) -> str:
 
 
 def extract_links_from_html(base_url: str, html: str) -> List[str]:
-    # очень простой парсер ссылок без bs4
     links = []
     for m in re.finditer(r'href\s*=\s*["\']([^"\']+)["\']', html, flags=re.IGNORECASE):
         href = m.group(1).strip()
@@ -159,52 +177,76 @@ def extract_links_from_html(base_url: str, html: str) -> List[str]:
 
 
 def pick_document_links(urls: List[str]) -> List[str]:
-    out = []
+    out: List[str] = []
     seen = set()
+
     for u in urls:
         u = normalize_url(u)
         if not u or u in seen:
             continue
         seen.add(u)
 
-        # убираем мусор
         if is_drop_url(u):
             continue
 
-        # оставляем только похожее на документы/карточки
         ok = False
         for p in DOC_URL_PATTERNS:
             if re.search(p, u, flags=re.IGNORECASE):
                 ok = True
                 break
 
-        # на pravo.gov.ru важнее конкретные /document/<id>
         if "publication.pravo.gov.ru" in u:
             ok = bool(PRAVO_DOC_RE.search(u))
 
-        # на regulation.gov — только /projects/<id>
         if "regulation.gov.ru" in u:
             ok = bool(REGULATION_PROJECT_RE.search(u))
 
+        if "www.nspk.ru" in u:
+            # Только потенциально документные ссылки, а не статика фронтенда
+            path = urlparse(u).path.lower()
+            if any(path.endswith(ext) for ext in [".pdf", ".doc", ".docx", ".xls", ".xlsx"]):
+                ok = True
+            else:
+                ok = False
+
         if ok:
             out.append(u)
+
     return out
 
 
-async def title_for_known_docs(session: aiohttp.ClientSession, url: str) -> str:
-    # без OCR/тяжелого парсинга — берём <title> если получится
+def clean_title(raw_title: str) -> str:
+    title = raw_title or ""
+    title = html_lib.unescape(title)
+    title = normalize_spaces(title)
+    title = title.replace("∙", "·")
+    title = title.replace("&nbsp;", " ")
+    return title[:240] if title else "Документ"
+
+
+def extract_text_preview_from_html(html: str) -> str:
+    html = re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
+    html = re.sub(r"(?is)<style.*?>.*?</style>", " ", html)
+    html = re.sub(r"(?is)<head.*?>.*?</head>", " ", html)
+    html = re.sub(r"(?is)<[^>]+>", " ", html)
+    html = html_lib.unescape(html)
+    html = normalize_spaces(html)
+    return html[:4000]
+
+
+async def title_and_preview_for_doc(session: aiohttp.ClientSession, url: str) -> Tuple[str, str]:
     try:
         html = await fetch_text(session, url)
+
+        title = "Документ"
         m = re.search(r"<title>(.*?)</title>", html, flags=re.IGNORECASE | re.DOTALL)
         if m:
-            title = re.sub(r"\s+", " ", m.group(1)).strip()
-            # подчистить хвосты
-            title = title.replace("∙", "·")
-            if title:
-                return title[:240]
+            title = clean_title(m.group(1))
+
+        preview = extract_text_preview_from_html(html)
+        return title, preview
     except Exception:
-        pass
-    return "Документ"
+        return "Документ", ""
 
 
 async def collect_items_for_source(
@@ -212,34 +254,40 @@ async def collect_items_for_source(
     source_name: str,
     url: str,
 ) -> Tuple[List[Item], Optional[str]]:
-    """
-    Возвращает (items, error_text)
-    items — список найденных документоподобных ссылок + заголовки
-    """
     try:
         html = await fetch_text(session, url)
         links = extract_links_from_html(url, html)
         doc_links = pick_document_links(links)
 
-        # ограничение количества, чтобы не DDOSить сайты и не ловить 429
         doc_links = doc_links[:MAX_ITEMS_PER_REGULATOR * 3]
 
         items: List[Item] = []
         for link in doc_links:
-            title = await title_for_known_docs(session, link) if "publication.pravo.gov.ru/document/" in link else "Документ"
-            # regulation.gov — там обычно нормальные заголовки прямо в тексте ссылки не достанем без парсинга страницы,
-            # поэтому оставляем "Документ" (потом добавим ИИ)
-            if "regulation.gov.ru/projects/" in link:
-                title = "Проект НПА"
-            items.append(Item(title=title, url=link))
+            title = "Документ"
+            preview = ""
 
-        # дедуп внутри источника
+            if "publication.pravo.gov.ru/document/" in link:
+                title, preview = await title_and_preview_for_doc(session, link)
+            elif "regulation.gov.ru/projects/" in link:
+                title = "Проект НПА"
+            elif "cbr.ru" in link:
+                title = "Документ Банка России"
+            elif "rst.gov.ru" in link:
+                title = "Документ Росстандарта"
+            elif "fstec.ru" in link:
+                title = "Документ ФСТЭК"
+
+            items.append(Item(title=title, url=link, content_preview=preview))
+
         uniq: Dict[str, Item] = {}
         for it in items:
             if it.url not in uniq:
                 uniq[it.url] = it
+
         return list(uniq.values()), None
 
+    except asyncio.TimeoutError:
+        return [], "Источник не ответил вовремя"
     except Exception as e:
         return [], f"{type(e).__name__}: {e}"
 
@@ -255,7 +303,6 @@ def load_state() -> Dict[str, Any]:
 
 def is_new_and_mark(state: Dict[str, Any], regulator: str, url: str) -> bool:
     seen = state["seen"].setdefault(regulator, {})
-    # хранить timestamp последнего появления
     if url in seen:
         return False
     seen[url] = int(time.time())
@@ -276,16 +323,89 @@ def compact_seen(state: Dict[str, Any], keep_days: int = 45) -> None:
                 reg_map.pop(url, None)
 
 
-def format_message(regulator: str, items: List[Item]) -> str:
+async def analyze_item_with_openai(
+    client: AsyncOpenAI,
+    regulator: str,
+    item: Item,
+    sem: asyncio.Semaphore,
+) -> Dict[str, str]:
+    fallback = {
+        "relevance": "не определено",
+        "summary": "Краткое описание не получено",
+        "title": item.title,
+    }
+
+    if not OPENAI_API_KEY:
+        return fallback
+
+    preview = item.content_preview[:2500] if item.content_preview else ""
+    user_prompt = f"""
+Ты анализируешь новые нормативные публикации для Telegram-бота мониторинга.
+
+Регулятор: {regulator}
+Заголовок: {item.title}
+Ссылка: {item.url}
+Текст/фрагмент:
+{preview if preview else "Нет текста, доступен только заголовок и ссылка."}
+
+Задача:
+1. Определи, насколько публикация релевантна тематике ИБ:
+   - высокая
+   - средняя
+   - низкая
+   - неясно
+2. Дай краткое описание на русском языке в 1-2 предложениях без воды.
+3. Если заголовок мусорный или слишком общий, предложи более понятный короткий заголовок.
+
+Верни только JSON такого вида:
+{{
+  "relevance": "...",
+  "summary": "...",
+  "title": "..."
+}}
+""".strip()
+
+    try:
+        async with sem:
+            response = await client.responses.create(
+                model=OPENAI_MODEL,
+                input=user_prompt,
+                timeout=OPENAI_TIMEOUT_SECONDS,
+            )
+
+        text = response.output_text.strip()
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if not match:
+            return fallback
+
+        data = json.loads(match.group(0))
+
+        return {
+            "relevance": str(data.get("relevance", fallback["relevance"])).strip(),
+            "summary": str(data.get("summary", fallback["summary"])).strip(),
+            "title": clean_title(str(data.get("title", item.title)).strip()) or item.title,
+        }
+
+    except Exception:
+        return fallback
+
+
+def format_message(regulator: str, analyzed_items: List[Dict[str, str]]) -> str:
     lines = []
-    lines.append("Мониторинг НПА (ИБ)")
+    lines.append("Мониторинг НПА")
     lines.append(f"Регулятор: {regulator}")
     lines.append(f"Дата: {now_msk_str()}")
-    lines.append(f"Новые публикации: {len(items)}")
+    lines.append(f"Новые публикации: {len(analyzed_items)}")
     lines.append("")
-    for i, it in enumerate(items, 1):
-        lines.append(f"{i}) {it.title} — {it.url}")
-    return "\n".join(lines)
+
+    for i, it in enumerate(analyzed_items, 1):
+        lines.append(f"{i}) {it['title']}")
+        lines.append(f"Релевантность ИБ: {it['relevance']}")
+        lines.append(f"Кратко: {it['summary']}")
+        lines.append(f"Ссылка: {it['url']}")
+        lines.append("")
+
+    return "\n".join(lines).strip()
 
 
 async def send_tg(session: aiohttp.ClientSession, text: str) -> None:
@@ -294,12 +414,10 @@ async def send_tg(session: aiohttp.ClientSession, text: str) -> None:
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-    # режем по лимиту
     chunks = []
     t = text.strip()
     while t:
         chunk = t[:TELEGRAM_MAX_CHARS]
-        # пытаться резать по границе строки
         if len(t) > TELEGRAM_MAX_CHARS:
             last_nl = chunk.rfind("\n")
             if last_nl > 800:
@@ -320,8 +438,6 @@ async def send_tg(session: aiohttp.ClientSession, text: str) -> None:
                 async with session.post(url, json=payload) as r:
                     body = await r.text()
                     if r.status == 429:
-                        # Telegram часто отдаёт retry_after в JSON
-                        # {"ok":false,"error_code":429,"description":"Too Many Requests: retry after 7"}
                         m = re.search(r"retry after (\d+)", body, flags=re.IGNORECASE)
                         wait_s = int(m.group(1)) if m else (2 + attempt)
                         await asyncio.sleep(wait_s)
@@ -348,8 +464,10 @@ async def main():
         "Accept-Language": "ru,en;q=0.8",
     }
 
+    openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+    ai_sem = asyncio.Semaphore(OPENAI_MAX_CONCURRENT)
+
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-        # собираем по регуляторам: один регулятор = одно сообщение
         regulator_to_urls: Dict[str, List[str]] = {}
         for s in sources:
             reg = str(s["regulator"]).strip()
@@ -361,7 +479,6 @@ async def main():
             all_items: List[Item] = []
             errors: List[Tuple[str, str]] = []
 
-            # по каждому источнику регулятора
             for u in urls:
                 items, err = await collect_items_for_source(session, regulator, u)
                 if err:
@@ -369,7 +486,6 @@ async def main():
                 else:
                     all_items.extend(items)
 
-            # дедуп по url + отсеивание "мусора"
             uniq: Dict[str, Item] = {}
             for it in all_items:
                 if is_drop_url(it.url):
@@ -377,25 +493,53 @@ async def main():
                 if it.url not in uniq:
                     uniq[it.url] = it
 
-            # считаем новое
-            new_items = []
+            new_items: List[Item] = []
             for it in uniq.values():
                 if is_new_and_mark(state, regulator, it.url):
                     new_items.append(it)
 
-            # лимит на сообщение
             new_items = new_items[:MAX_ITEMS_PER_REGULATOR]
 
-            # если есть новые — отправляем одним сообщением
             if new_items:
-                msg = format_message(regulator, new_items)
+                analyzed_items: List[Dict[str, str]] = []
+
+                if openai_client:
+                    tasks = [
+                        analyze_item_with_openai(openai_client, regulator, item, ai_sem)
+                        for item in new_items
+                    ]
+                    ai_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                    for item, ai_result in zip(new_items, ai_results):
+                        if isinstance(ai_result, Exception):
+                            analyzed_items.append({
+                                "title": item.title,
+                                "relevance": "не определено",
+                                "summary": "Анализ временно недоступен",
+                                "url": item.url,
+                            })
+                        else:
+                            analyzed_items.append({
+                                "title": ai_result.get("title", item.title),
+                                "relevance": ai_result.get("relevance", "не определено"),
+                                "summary": ai_result.get("summary", "Краткое описание не получено"),
+                                "url": item.url,
+                            })
+                else:
+                    for item in new_items:
+                        analyzed_items.append({
+                            "title": item.title,
+                            "relevance": "не определено",
+                            "summary": "OpenAI API не подключен",
+                            "url": item.url,
+                        })
+
+                msg = format_message(regulator, analyzed_items)
                 await send_tg(session, msg)
 
-            # ошибки источников отправляем отдельно (но тоже одним сообщением на регулятора)
-            # чтобы не спамить — отправляем только если нет новых публикаций (или если хочешь всегда — убери условие)
             if errors and not new_items:
                 lines = []
-                lines.append("Мониторинг НПА (ИБ)")
+                lines.append("Мониторинг НПА")
                 lines.append(f"Регулятор: {regulator}")
                 lines.append(f"Дата: {now_msk_str()}")
                 lines.append("Ошибки источников:")
