@@ -21,7 +21,7 @@ SOURCES_FILE = "sources.json"
 STATE_FILE = "state.json"
 
 # ---- Настройки ----
-MAX_ITEMS_PER_REGULATOR = 10
+MAX_ITEMS_PER_REGULATOR = 3
 HTTP_TIMEOUT_SECONDS = 25
 HTTP_RETRIES = 3
 HTTP_RETRY_BACKOFF = 1.6
@@ -29,8 +29,7 @@ TELEGRAM_MAX_CHARS = 3500
 TELEGRAM_RETRIES = 5
 
 OPENAI_MODEL = "gpt-5.4"
-OPENAI_TIMEOUT_SECONDS = 40
-OPENAI_MAX_CONCURRENT = 3
+OPENAI_MAX_CONCURRENT = 2
 
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -202,7 +201,6 @@ def pick_document_links(urls: List[str]) -> List[str]:
             ok = bool(REGULATION_PROJECT_RE.search(u))
 
         if "www.nspk.ru" in u:
-            # Только потенциально документные ссылки, а не статика фронтенда
             path = urlparse(u).path.lower()
             if any(path.endswith(ext) for ext in [".pdf", ".doc", ".docx", ".xls", ".xlsx"]):
                 ok = True
@@ -231,19 +229,19 @@ def extract_text_preview_from_html(html: str) -> str:
     html = re.sub(r"(?is)<[^>]+>", " ", html)
     html = html_lib.unescape(html)
     html = normalize_spaces(html)
-    return html[:4000]
+    return html[:3000]
 
 
 async def title_and_preview_for_doc(session: aiohttp.ClientSession, url: str) -> Tuple[str, str]:
     try:
-        html = await fetch_text(session, url)
+        page_html = await fetch_text(session, url)
 
         title = "Документ"
-        m = re.search(r"<title>(.*?)</title>", html, flags=re.IGNORECASE | re.DOTALL)
+        m = re.search(r"<title>(.*?)</title>", page_html, flags=re.IGNORECASE | re.DOTALL)
         if m:
             title = clean_title(m.group(1))
 
-        preview = extract_text_preview_from_html(html)
+        preview = extract_text_preview_from_html(page_html)
         return title, preview
     except Exception:
         return "Документ", ""
@@ -255,10 +253,9 @@ async def collect_items_for_source(
     url: str,
 ) -> Tuple[List[Item], Optional[str]]:
     try:
-        html = await fetch_text(session, url)
-        links = extract_links_from_html(url, html)
+        page_html = await fetch_text(session, url)
+        links = extract_links_from_html(url, page_html)
         doc_links = pick_document_links(links)
-
         doc_links = doc_links[:MAX_ITEMS_PER_REGULATOR * 3]
 
         items: List[Item] = []
@@ -330,38 +327,33 @@ async def analyze_item_with_openai(
     sem: asyncio.Semaphore,
 ) -> Dict[str, str]:
     fallback = {
-        "relevance": "не определено",
-        "summary": "Краткое описание не получено",
+        "relevance": "ошибка AI",
+        "summary": "AI-анализ не выполнен",
         "title": item.title,
+        "ai_debug": "неизвестная ошибка"
     }
 
     if not OPENAI_API_KEY:
+        fallback["ai_debug"] = "OPENAI_API_KEY не задан"
         return fallback
 
-    preview = item.content_preview[:2500] if item.content_preview else ""
-    user_prompt = f"""
-Ты анализируешь новые нормативные публикации для Telegram-бота мониторинга.
+    preview = item.content_preview[:2000] if item.content_preview else ""
+
+    prompt = f"""
+Ты анализируешь нормативную публикацию для Telegram-бота мониторинга.
 
 Регулятор: {regulator}
 Заголовок: {item.title}
 Ссылка: {item.url}
-Текст/фрагмент:
-{preview if preview else "Нет текста, доступен только заголовок и ссылка."}
+Текст:
+{preview if preview else "Нет доступного текста, есть только заголовок и ссылка."}
 
-Задача:
-1. Определи, насколько публикация релевантна тематике ИБ:
-   - высокая
-   - средняя
-   - низкая
-   - неясно
-2. Дай краткое описание на русском языке в 1-2 предложениях без воды.
-3. Если заголовок мусорный или слишком общий, предложи более понятный короткий заголовок.
+Верни ответ СТРОГО в JSON без пояснений и markdown:
 
-Верни только JSON такого вида:
 {{
-  "relevance": "...",
-  "summary": "...",
-  "title": "..."
+  "relevance": "высокая|средняя|низкая|неясно",
+  "summary": "1-2 предложения по сути документа на русском языке",
+  "title": "короткий понятный заголовок"
 }}
 """.strip()
 
@@ -369,24 +361,38 @@ async def analyze_item_with_openai(
         async with sem:
             response = await client.responses.create(
                 model=OPENAI_MODEL,
-                input=user_prompt,
-                timeout=OPENAI_TIMEOUT_SECONDS,
+                input=prompt
             )
 
-        text = response.output_text.strip()
-        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-        if not match:
+        raw = (response.output_text or "").strip()
+        if not raw:
+            fallback["ai_debug"] = "пустой ответ модели"
             return fallback
 
-        data = json.loads(match.group(0))
+        match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+        if not match:
+            fallback["ai_debug"] = f"ответ не похож на JSON: {raw[:300]}"
+            return fallback
+
+        try:
+            data = json.loads(match.group(0))
+        except Exception as e:
+            fallback["ai_debug"] = f"JSON parse error: {type(e).__name__}: {e}; raw={raw[:300]}"
+            return fallback
+
+        title = clean_title(str(data.get("title", item.title)).strip()) or item.title
+        relevance = str(data.get("relevance", "неясно")).strip()
+        summary = normalize_spaces(str(data.get("summary", "Описание не получено")).strip())
 
         return {
-            "relevance": str(data.get("relevance", fallback["relevance"])).strip(),
-            "summary": str(data.get("summary", fallback["summary"])).strip(),
-            "title": clean_title(str(data.get("title", item.title)).strip()) or item.title,
+            "relevance": relevance,
+            "summary": summary,
+            "title": title,
+            "ai_debug": "ok"
         }
 
-    except Exception:
+    except Exception as e:
+        fallback["ai_debug"] = f"{type(e).__name__}: {e}"
         return fallback
 
 
@@ -403,6 +409,8 @@ def format_message(regulator: str, analyzed_items: List[Dict[str, str]]) -> str:
         lines.append(f"Релевантность ИБ: {it['relevance']}")
         lines.append(f"Кратко: {it['summary']}")
         lines.append(f"Ссылка: {it['url']}")
+        if it.get("ai_debug") and it["ai_debug"] != "ok":
+            lines.append(f"AI_DEBUG: {it['ai_debug']}")
         lines.append("")
 
     return "\n".join(lines).strip()
@@ -514,24 +522,27 @@ async def main():
                         if isinstance(ai_result, Exception):
                             analyzed_items.append({
                                 "title": item.title,
-                                "relevance": "не определено",
-                                "summary": "Анализ временно недоступен",
+                                "relevance": "ошибка AI",
+                                "summary": "Исключение верхнего уровня в AI-анализе",
                                 "url": item.url,
+                                "ai_debug": f"{type(ai_result).__name__}: {ai_result}",
                             })
                         else:
                             analyzed_items.append({
                                 "title": ai_result.get("title", item.title),
-                                "relevance": ai_result.get("relevance", "не определено"),
-                                "summary": ai_result.get("summary", "Краткое описание не получено"),
+                                "relevance": ai_result.get("relevance", "ошибка AI"),
+                                "summary": ai_result.get("summary", "AI-анализ не выполнен"),
                                 "url": item.url,
+                                "ai_debug": ai_result.get("ai_debug", "no-debug"),
                             })
                 else:
                     for item in new_items:
                         analyzed_items.append({
                             "title": item.title,
-                            "relevance": "не определено",
+                            "relevance": "ошибка AI",
                             "summary": "OpenAI API не подключен",
                             "url": item.url,
+                            "ai_debug": "OPENAI_API_KEY не найден",
                         })
 
                 msg = format_message(regulator, analyzed_items)
