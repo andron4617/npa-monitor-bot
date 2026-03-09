@@ -1,3 +1,80 @@
 {
-  "seen": {}
+  "seen": {
+    "Банк России": {
+      "https://cbr.ru/Content/Document/File/48780/form_orv.pdf": 1773096061
+    },
+    "Минцифры": {
+      "http://publication.pravo.gov.ru/document/0001202512100015": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202512110008": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202512120004": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202512230025": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202512260018": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202512300061": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202601210006": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202601220007": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202601230008": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202601270007": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202602030017": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202602190002": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202602200025": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202602250004": 1773096044,
+      "http://publication.pravo.gov.ru/document/0001202603040008": 1773096044
+    },
+    "Роскомнадзор": {
+      "http://publication.pravo.gov.ru/document/0001202504140032": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202504170013": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202504170014": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202504240001": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202505270016": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202506110011": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202506230010": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202506270004": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202507150016": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202508010002": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202508210024": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202508270012": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202509230005": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202512220021": 1773096056,
+      "http://publication.pravo.gov.ru/document/0001202601190007": 1773096056
+    },
+    "Указы Президента РФ": {
+      "http://publication.pravo.gov.ru/document/0001202603090001": 1773096023,
+      "http://publication.pravo.gov.ru/document/0001202603090002": 1773096023,
+      "http://publication.pravo.gov.ru/document/0001202603090003": 1773096023
+    },
+    "ФСБ": {
+      "http://publication.pravo.gov.ru/document/0001202512260014": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202512300011": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202512300057": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202512300058": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202512300059": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202512300063": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202512300064": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202512300066": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202601230009": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202602040025": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202602060010": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202602120005": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202602240016": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202603050012": 1773096036,
+      "http://publication.pravo.gov.ru/document/0001202603050014": 1773096036
+    },
+    "ФСТЭК": {
+      "http://publication.pravo.gov.ru/document/0001202409260001": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202410250022": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202505190022": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202506170011": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202507020007": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202507020008": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202507140001": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202507290003": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202508210006": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202508210016": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202509040001": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202509190005": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202509230004": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202511120017": 1773096027,
+      "http://publication.pravo.gov.ru/document/0001202512300067": 1773096027
+    }
+  }
 }
