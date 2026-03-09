@@ -83,6 +83,46 @@ DOC_URL_PATTERNS = [
 PRAVO_DOC_RE = re.compile(r"https?://publication\.pravo\.gov\.ru/document/\d+")
 REGULATION_PROJECT_RE = re.compile(r"https?://regulation\.gov\.ru/projects/\d+")
 
+# Явно нерелевантные заголовки для ИБ-мониторинга
+TITLE_DROP_PATTERNS = [
+    r"\bслужебн\w* поведени\w*",
+    r"\bконфликт\w* интерес\w*",
+    r"\bдоход\w*[, ]+расход\w*[, ]+имуществ\w*",
+    r"\bобязательств\w* имуществен\w* характер\w*",
+    r"\bсоциальн\w* гаранти\w*",
+    r"\bвступительн\w* испытан\w*",
+    r"\bконкурс\w* на замещен\w*",
+    r"\bвакантн\w* должност\w*",
+    r"\bгражданск\w* оборон\w*",
+    r"\bсостав\w* коллеги\w*",
+    r"\bназначен\w* официальн\w* представител\w*",
+    r"\bаккредитаци\w* российск\w* организац\w*",
+    r"\bперечн\w* значим\w* разработчик\w*",
+    r"\bкомисси\w* по соблюдени\w* требован\w*",
+]
+
+# Явно полезные сигналы для ИБ-мониторинга
+TITLE_KEEP_PATTERNS = [
+    r"\bзащит\w* информац\w*",
+    r"\bинформационн\w* безопасност\w*",
+    r"\bкибербезопасност\w*",
+    r"\bкритическ\w* информационн\w* инфраструктур\w*",
+    r"\bкии\b",
+    r"\bперсональн\w* данн\w*",
+    r"\bкриптограф\w*",
+    r"\bшифрован\w*",
+    r"\bскзи\b",
+    r"\bори\b",
+    r"\bорганизатор\w* распространени\w* информац\w*",
+    r"\bгис\b",
+    r"\bис\b",
+    r"\bиспдн\b",
+    r"\bсвязи\b",
+    r"\bнадзор\w* в област\w* связи\b",
+    r"\bпроверочн\w* лист\w*",
+    r"\bреестр\w* ори\b",
+]
+
 
 @dataclass(frozen=True)
 class Item:
@@ -232,6 +272,40 @@ def extract_text_preview_from_html(page_html: str) -> str:
     return page_html[:3000]
 
 
+def title_is_obviously_irrelevant(title: str) -> bool:
+    t = title.lower()
+    return any(re.search(p, t, flags=re.IGNORECASE) for p in TITLE_DROP_PATTERNS)
+
+
+def title_has_ib_signal(title: str) -> bool:
+    t = title.lower()
+    return any(re.search(p, t, flags=re.IGNORECASE) for p in TITLE_KEEP_PATTERNS)
+
+
+def prefilter_item(item: Item, regulator: str) -> bool:
+    """
+    True -> оставляем
+    False -> выкидываем до AI
+    """
+    title = item.title or ""
+
+    if title_is_obviously_irrelevant(title):
+        return False
+
+    # Для профильных регуляторов оставляем спорные документы на AI,
+    # но жестко выкидываем явно мусорные по title.
+    if regulator in {"ФСТЭК", "ФСБ", "Минцифры", "Роскомнадзор", "Банк России", "Проекты НПА"}:
+        return True
+
+    # Для остальных регуляторов нужен хоть какой-то ИБ-сигнал,
+    # иначе документ неинтересен для данного мониторинга.
+    if title_has_ib_signal(title):
+        return True
+
+    # Президента / Правительство по умолчанию режем, если нет ИБ-сигналов.
+    return False
+
+
 async def title_and_preview_for_doc(session: aiohttp.ClientSession, url: str) -> Tuple[str, str]:
     try:
         page_html = await fetch_text(session, url)
@@ -256,7 +330,7 @@ async def collect_items_for_source(
         page_html = await fetch_text(session, url)
         links = extract_links_from_html(url, page_html)
         doc_links = pick_document_links(links)
-        doc_links = doc_links[:MAX_ITEMS_PER_REGULATOR * 3]
+        doc_links = doc_links[:MAX_ITEMS_PER_REGULATOR * 5]
 
         items: List[Item] = []
         for link in doc_links:
@@ -546,19 +620,21 @@ async def main():
                 if is_new_and_mark(state, regulator, it.url):
                     new_items.append(it)
 
-            new_items = new_items[:MAX_ITEMS_PER_REGULATOR]
+            # Новый слой: фильтр до AI
+            filtered_items = [it for it in new_items if prefilter_item(it, regulator)]
+            filtered_items = filtered_items[:MAX_ITEMS_PER_REGULATOR]
 
-            if new_items:
+            if filtered_items:
                 analyzed_items: List[Dict[str, str]] = []
 
                 if openai_client:
                     tasks = [
                         analyze_item_with_openai(openai_client, regulator, item, ai_sem)
-                        for item in new_items
+                        for item in filtered_items
                     ]
                     ai_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    for item, ai_result in zip(new_items, ai_results):
+                    for item, ai_result in zip(filtered_items, ai_results):
                         if isinstance(ai_result, Exception):
                             analyzed_items.append({
                                 "title": item.title,
@@ -576,7 +652,7 @@ async def main():
                                 "ai_debug": ai_result.get("ai_debug", "no-debug"),
                             })
                 else:
-                    for item in new_items:
+                    for item in filtered_items:
                         analyzed_items.append({
                             "title": item.title,
                             "relevance": "ошибка AI",
@@ -588,7 +664,7 @@ async def main():
                 msg = format_message(regulator, analyzed_items)
                 await send_tg(session, msg)
 
-            if errors and not new_items:
+            if errors and not filtered_items:
                 lines = []
                 lines.append("Мониторинг НПА")
                 lines.append(f"Регулятор: {regulator}")
