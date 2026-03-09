@@ -20,8 +20,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 SOURCES_FILE = "sources.json"
 STATE_FILE = "state.json"
 
-# ---- Настройки ----
-MAX_ITEMS_PER_REGULATOR = 3
+MAX_ITEMS_PER_REGULATOR = 5
 HTTP_TIMEOUT_SECONDS = 25
 HTTP_RETRIES = 3
 HTTP_RETRY_BACKOFF = 1.6
@@ -83,44 +82,40 @@ DOC_URL_PATTERNS = [
 PRAVO_DOC_RE = re.compile(r"https?://publication\.pravo\.gov\.ru/document/\d+")
 REGULATION_PROJECT_RE = re.compile(r"https?://regulation\.gov\.ru/projects/\d+")
 
-# Явно нерелевантные заголовки для ИБ-мониторинга
-TITLE_DROP_PATTERNS = [
-    r"\bслужебн\w* поведени\w*",
-    r"\bконфликт\w* интерес\w*",
-    r"\bдоход\w*[, ]+расход\w*[, ]+имуществ\w*",
-    r"\bобязательств\w* имуществен\w* характер\w*",
-    r"\bсоциальн\w* гаранти\w*",
-    r"\bвступительн\w* испытан\w*",
-    r"\bконкурс\w* на замещен\w*",
-    r"\bвакантн\w* должност\w*",
-    r"\bгражданск\w* оборон\w*",
-    r"\bсостав\w* коллеги\w*",
-    r"\bназначен\w* официальн\w* представител\w*",
-    r"\bаккредитаци\w* российск\w* организац\w*",
-    r"\bперечн\w* значим\w* разработчик\w*",
-    r"\bкомисси\w* по соблюдени\w* требован\w*",
+TEXT_DROP_PATTERNS = [
+    r"служебн\w*\s+поведени\w*",
+    r"конфликт\w*\s+интерес\w*",
+    r"доход\w*[, ]+расход\w*[, ]+имуществ\w*",
+    r"обязательств\w*\s+имуществен\w*\s+характер\w*",
+    r"социальн\w*\s+гаранти\w*",
+    r"вступительн\w*\s+испытан\w*",
+    r"конкурс\w*\s+на\s+замещен\w*",
+    r"вакантн\w*\s+должност\w*",
+    r"гражданск\w*\s+оборон\w*",
+    r"состав\w*\s+коллеги\w*",
+    r"официальн\w*\s+представител\w*",
+    r"аккредитаци\w*\s+российск\w*\s+организац\w*",
+    r"значим\w*\s+разработчик\w*",
+    r"служб\w*\s+этик\w*",
 ]
 
-# Явно полезные сигналы для ИБ-мониторинга
-TITLE_KEEP_PATTERNS = [
-    r"\bзащит\w* информац\w*",
-    r"\bинформационн\w* безопасност\w*",
-    r"\bкибербезопасност\w*",
-    r"\bкритическ\w* информационн\w* инфраструктур\w*",
+TEXT_KEEP_PATTERNS = [
+    r"защит\w*\s+информац\w*",
+    r"информационн\w*\s+безопасност\w*",
+    r"кибербезопасност\w*",
+    r"критическ\w*\s+информационн\w*\s+инфраструктур\w*",
     r"\bкии\b",
-    r"\bперсональн\w* данн\w*",
-    r"\bкриптограф\w*",
-    r"\bшифрован\w*",
+    r"персональн\w*\s+данн\w*",
+    r"криптограф\w*",
+    r"шифрован\w*",
     r"\bскзи\b",
     r"\bори\b",
-    r"\bорганизатор\w* распространени\w* информац\w*",
-    r"\bгис\b",
-    r"\bис\b",
-    r"\bиспдн\b",
-    r"\bсвязи\b",
-    r"\bнадзор\w* в област\w* связи\b",
-    r"\bпроверочн\w* лист\w*",
-    r"\bреестр\w* ори\b",
+    r"организатор\w*\s+распространени\w*\s+информац\w*",
+    r"реестр\w*\s+ори",
+    r"надзор\w*\s+в\s+област\w*\s+связи",
+    r"проверочн\w*\s+лист",
+    r"оператор\w*\s+связи",
+    r"защит\w*\s+персональн\w*\s+данн\w*",
 ]
 
 
@@ -242,10 +237,7 @@ def pick_document_links(urls: List[str]) -> List[str]:
 
         if "www.nspk.ru" in u:
             path = urlparse(u).path.lower()
-            if any(path.endswith(ext) for ext in [".pdf", ".doc", ".docx", ".xls", ".xlsx"]):
-                ok = True
-            else:
-                ok = False
+            ok = any(path.endswith(ext) for ext in [".pdf", ".doc", ".docx", ".xls", ".xlsx"])
 
         if ok:
             out.append(u)
@@ -269,41 +261,27 @@ def extract_text_preview_from_html(page_html: str) -> str:
     page_html = re.sub(r"(?is)<[^>]+>", " ", page_html)
     page_html = html_lib.unescape(page_html)
     page_html = normalize_spaces(page_html)
-    return page_html[:3000]
+    return page_html[:3500]
 
 
-def title_is_obviously_irrelevant(title: str) -> bool:
-    t = title.lower()
-    return any(re.search(p, t, flags=re.IGNORECASE) for p in TITLE_DROP_PATTERNS)
+def combined_item_text(item: Item) -> str:
+    return normalize_spaces(f"{item.title} {item.content_preview}".lower())
 
 
-def title_has_ib_signal(title: str) -> bool:
-    t = title.lower()
-    return any(re.search(p, t, flags=re.IGNORECASE) for p in TITLE_KEEP_PATTERNS)
+def text_matches_any(text: str, patterns: List[str]) -> bool:
+    return any(re.search(p, text, flags=re.IGNORECASE) for p in patterns)
 
 
 def prefilter_item(item: Item, regulator: str) -> bool:
-    """
-    True -> оставляем
-    False -> выкидываем до AI
-    """
-    title = item.title or ""
+    text = combined_item_text(item)
 
-    if title_is_obviously_irrelevant(title):
+    if text_matches_any(text, TEXT_DROP_PATTERNS):
         return False
 
-    # Для профильных регуляторов оставляем спорные документы на AI,
-    # но жестко выкидываем явно мусорные по title.
     if regulator in {"ФСТЭК", "ФСБ", "Минцифры", "Роскомнадзор", "Банк России", "Проекты НПА"}:
         return True
 
-    # Для остальных регуляторов нужен хоть какой-то ИБ-сигнал,
-    # иначе документ неинтересен для данного мониторинга.
-    if title_has_ib_signal(title):
-        return True
-
-    # Президента / Правительство по умолчанию режем, если нет ИБ-сигналов.
-    return False
+    return text_matches_any(text, TEXT_KEEP_PATTERNS)
 
 
 async def title_and_preview_for_doc(session: aiohttp.ClientSession, url: str) -> Tuple[str, str]:
@@ -330,7 +308,7 @@ async def collect_items_for_source(
         page_html = await fetch_text(session, url)
         links = extract_links_from_html(url, page_html)
         doc_links = pick_document_links(links)
-        doc_links = doc_links[:MAX_ITEMS_PER_REGULATOR * 5]
+        doc_links = doc_links[:MAX_ITEMS_PER_REGULATOR * 6]
 
         items: List[Item] = []
         for link in doc_links:
@@ -417,39 +395,35 @@ async def analyze_item_with_openai(
 Ты анализируешь нормативную публикацию для Telegram-бота мониторинга НПА.
 
 ТВОЯ ЗАДАЧА:
-1. Определить РЕЛЕВАНТНОСТЬ ИМЕННО ДЛЯ ИНФОРМАЦИОННОЙ БЕЗОПАСНОСТИ, а не общую важность документа.
+1. Определить РЕЛЕВАНТНОСТЬ ИМЕННО ДЛЯ ИНФОРМАЦИОННОЙ БЕЗОПАСНОСТИ.
 2. Дать краткое описание только по доступным данным, без догадок.
 
-СЧИТАЙ ВЫСОКОЙ ИБ-РЕЛЕВАНТНОСТЬЮ только документы, которые прямо относятся к одному или нескольким направлениям:
-- защита информации
-- информационная безопасность
-- кибербезопасность
-- криптография / шифрование / СКЗИ
-- КИИ / критическая информационная инфраструктура
-- безопасность ГИС, ИС, ИСПДн, сетей и связи
-- персональные данные и требования к их защите
-- требования к операторам связи, ОРИ, цифровым платформам, если это влияет на безопасность, хранение, доступ, контроль, надзор
-- обязательные технические, организационные или контрольные меры в ИТ/ИБ
+СЧИТАЙ ВЫСОКОЙ ИБ-РЕЛЕВАНТНОСТЬЮ только документы, которые прямо относятся к:
+- защите информации
+- информационной безопасности
+- кибербезопасности
+- криптографии / СКЗИ
+- КИИ
+- персональным данным и их защите
+- требованиям к ОРИ, операторам связи, цифровым платформам, если это связано с безопасностью, хранением, доступом, контролем
+- обязательным техническим, организационным или контрольным мерам в ИТ/ИБ
 
 СЧИТАЙ НИЗКОЙ ИБ-РЕЛЕВАНТНОСТЬЮ документы про:
-- кадровые назначения
-- состав коллегий, комиссий и советов
+- кадры
 - служебное поведение
 - конфликт интересов
-- доходы, расходы, имущество
+- доходы/расходы/имущество
 - соцгарантии
+- конкурсы
+- вступительные испытания
 - внутренние оргвопросы
 - гражданскую оборону без прямой ИБ-составляющей
-- конкурсы на госслужбу
-- образовательные и вступительные процедуры
-- общую административную деятельность, если она не содержит требований по ИБ
 
 СЧИТАЙ "НЕЯСНО", если из текста и заголовка нельзя уверенно сделать вывод.
 
 НЕ ДОДУМЫВАЙ:
-- не придумывай содержание документа, если его нет в доступном тексте
-- не называй документ ИБ-релевантным только потому, что он из ФСТЭК, ФСБ, Минцифры, РКН или ЦБ
-- если данных мало, так и пиши
+- не придумывай содержание, если его нет
+- не ставь высокую релевантность только из-за названия ведомства
 
 ИСХОДНЫЕ ДАННЫЕ:
 Регулятор: {regulator}
@@ -458,8 +432,7 @@ async def analyze_item_with_openai(
 Текст:
 {preview if preview else "Нет доступного текста, есть только заголовок и ссылка."}
 
-ТРЕБОВАНИЯ К ОТВЕТУ:
-Верни ответ СТРОГО в JSON без markdown и без пояснений:
+Верни СТРОГО JSON без markdown:
 
 {{
   "relevance": "высокая|средняя|низкая|неясно",
@@ -508,6 +481,18 @@ async def analyze_item_with_openai(
     except Exception as e:
         fallback["ai_debug"] = f"{type(e).__name__}: {e}"
         return fallback
+
+
+def should_send_after_ai(item: Dict[str, str], regulator: str) -> bool:
+    relevance = item.get("relevance", "неясно").lower()
+
+    if relevance == "низкая":
+        return False
+
+    if relevance == "неясно":
+        return regulator in {"ФСТЭК", "ФСБ", "Минцифры", "Роскомнадзор", "Банк России", "Проекты НПА"}
+
+    return True
 
 
 def format_message(regulator: str, analyzed_items: List[Dict[str, str]]) -> str:
@@ -620,21 +605,20 @@ async def main():
                 if is_new_and_mark(state, regulator, it.url):
                     new_items.append(it)
 
-            # Новый слой: фильтр до AI
-            filtered_items = [it for it in new_items if prefilter_item(it, regulator)]
-            filtered_items = filtered_items[:MAX_ITEMS_PER_REGULATOR]
+            prefiltered_items = [it for it in new_items if prefilter_item(it, regulator)]
+            prefiltered_items = prefiltered_items[:MAX_ITEMS_PER_REGULATOR]
 
-            if filtered_items:
+            if prefiltered_items:
                 analyzed_items: List[Dict[str, str]] = []
 
                 if openai_client:
                     tasks = [
                         analyze_item_with_openai(openai_client, regulator, item, ai_sem)
-                        for item in filtered_items
+                        for item in prefiltered_items
                     ]
                     ai_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    for item, ai_result in zip(filtered_items, ai_results):
+                    for item, ai_result in zip(prefiltered_items, ai_results):
                         if isinstance(ai_result, Exception):
                             analyzed_items.append({
                                 "title": item.title,
@@ -652,7 +636,7 @@ async def main():
                                 "ai_debug": ai_result.get("ai_debug", "no-debug"),
                             })
                 else:
-                    for item in filtered_items:
+                    for item in prefiltered_items:
                         analyzed_items.append({
                             "title": item.title,
                             "relevance": "ошибка AI",
@@ -661,10 +645,13 @@ async def main():
                             "ai_debug": "OPENAI_API_KEY не найден",
                         })
 
-                msg = format_message(regulator, analyzed_items)
-                await send_tg(session, msg)
+                final_items = [it for it in analyzed_items if should_send_after_ai(it, regulator)]
 
-            if errors and not filtered_items:
+                if final_items:
+                    msg = format_message(regulator, final_items)
+                    await send_tg(session, msg)
+
+            if errors and not prefiltered_items:
                 lines = []
                 lines.append("Мониторинг НПА")
                 lines.append(f"Регулятор: {regulator}")
