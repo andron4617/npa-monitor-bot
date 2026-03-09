@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # ВАЖНО: иначе push state.json будет 403
+  contents: write   # нужно для commit/push state.json
 
 concurrency:
   group: npa-monitor
@@ -37,6 +37,7 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           python main.py
 
