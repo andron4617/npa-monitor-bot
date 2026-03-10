@@ -437,7 +437,7 @@ def should_send_error(state: Dict[str, Any], regulator: str, cooldown_hours: int
     return False
 
 
-async def analyze_item_with_openai(
+async def analyze_with_openai(
     client: AsyncOpenAI,
     regulator: str,
     item: Item,
@@ -446,7 +446,9 @@ async def analyze_item_with_openai(
     fallback = {
         "relevance": "ошибка AI",
         "impact": "неясно",
+        "action": "monitor",
         "summary": "AI-анализ не выполнен",
+        "why_it_matters": "Не удалось получить оценку влияния документа.",
         "title": item.title,
         "ai_debug": "неизвестная ошибка"
     }
@@ -460,11 +462,13 @@ async def analyze_item_with_openai(
     prompt = f"""
 Ты анализируешь нормативную публикацию для Telegram-бота мониторинга НПА.
 
-Нужно вернуть 4 поля:
+Нужно вернуть 6 полей:
 1. relevance — релевантность именно для информационной безопасности
 2. impact — практическое влияние на организацию
-3. summary — кратко и строго по фактам
-4. title — короткий понятный заголовок
+3. action — что делать с документом
+4. summary — кратко и строго по фактам
+5. why_it_matters — зачем это важно в 1 коротком предложении
+6. title — короткий понятный заголовок
 
 RELEVANCE:
 - высокая
@@ -507,8 +511,11 @@ IMPACT:
 Низкое impact:
 - если документ технический, внутренний, узкий или почти не влияет на внешние организации
 
-Неясно:
-- если текста мало
+ACTION:
+- urgent -> если документ явно требует быстрого внимания
+- review -> если документ точно стоит изучить
+- monitor -> если документ потенциально полезен, но влияние пока неочевидно
+- ignore -> если документ не несет практической ценности для ИБ-мониторинга
 
 НЕ ДОДУМЫВАЙ.
 Если нет достаточного текста — честно ставь "неясно".
@@ -526,7 +533,9 @@ IMPACT:
 {{
   "relevance": "высокая|средняя|низкая|неясно",
   "impact": "высокое|среднее|низкое|неясно",
+  "action": "urgent|review|monitor|ignore",
   "summary": "1-2 предложения только по фактам из доступного текста",
+  "why_it_matters": "одно короткое предложение по сути практической значимости",
   "title": "короткий понятный заголовок без фантазий"
 }}
 """.strip()
@@ -557,7 +566,11 @@ IMPACT:
         title = clean_title(str(data.get("title", item.title)).strip()) or item.title
         relevance = str(data.get("relevance", "неясно")).strip().lower()
         impact = str(data.get("impact", "неясно")).strip().lower()
+        action = str(data.get("action", "monitor")).strip().lower()
         summary = normalize_spaces(str(data.get("summary", "Описание не получено")).strip())
+        why_it_matters = normalize_spaces(
+            str(data.get("why_it_matters", "Практическая значимость не определена.")).strip()
+        )
 
         if relevance not in {"высокая", "средняя", "низкая", "неясно"}:
             relevance = "неясно"
@@ -565,10 +578,15 @@ IMPACT:
         if impact not in {"высокое", "среднее", "низкое", "неясно"}:
             impact = "неясно"
 
+        if action not in {"urgent", "review", "monitor", "ignore"}:
+            action = "monitor"
+
         return {
             "relevance": relevance,
             "impact": impact,
+            "action": action,
             "summary": summary,
+            "why_it_matters": why_it_matters,
             "title": title,
             "ai_debug": "ok"
         }
@@ -579,15 +597,25 @@ IMPACT:
 
 
 def should_send_after_ai(item: Dict[str, str], regulator: str) -> bool:
-    relevance = item.get("relevance", "неясно").lower()
+    action = item.get("action", "monitor").lower()
 
-    if relevance == "низкая":
+    if action == "ignore":
         return False
 
-    if relevance == "неясно":
-        return regulator in {"ФСТЭК", "ФСБ", "Минцифры", "Роскомнадзор", "Банк России", "Проекты НПА"}
+    if action in {"urgent", "review"}:
+        return True
 
-    return True
+    if action == "monitor":
+        return regulator in {
+            "ФСТЭК",
+            "ФСБ",
+            "Минцифры",
+            "Роскомнадзор",
+            "Банк России",
+            "Проекты НПА"
+        }
+
+    return False
 
 
 def format_message(regulator: str, analyzed_items: List[Dict[str, str]]) -> str:
@@ -602,7 +630,9 @@ def format_message(regulator: str, analyzed_items: List[Dict[str, str]]) -> str:
         lines.append(f"{i}) {it['title']}")
         lines.append(f"Релевантность ИБ: {it['relevance']}")
         lines.append(f"Влияние: {it['impact']}")
+        lines.append(f"Действие: {it['action']}")
         lines.append(f"Кратко: {it['summary']}")
+        lines.append(f"Почему важно: {it['why_it_matters']}")
         lines.append(f"Ссылка: {it['url']}")
         if it.get("ai_debug") and it["ai_debug"] != "ok":
             lines.append(f"AI_DEBUG: {it['ai_debug']}")
@@ -709,7 +739,7 @@ async def main():
 
                 if openai_client:
                     tasks = [
-                        analyze_item_with_openai(openai_client, regulator, item, ai_sem)
+                        analyze_with_openai(openai_client, regulator, item, ai_sem)
                         for item in prefiltered_items
                     ]
                     ai_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -720,7 +750,9 @@ async def main():
                                 "title": item.title,
                                 "relevance": "ошибка AI",
                                 "impact": "неясно",
+                                "action": "monitor",
                                 "summary": "Исключение верхнего уровня в AI-анализе",
+                                "why_it_matters": "Не удалось получить вывод по документу.",
                                 "url": item.url,
                                 "ai_debug": f"{type(ai_result).__name__}: {ai_result}",
                             })
@@ -729,7 +761,12 @@ async def main():
                                 "title": ai_result.get("title", item.title),
                                 "relevance": ai_result.get("relevance", "ошибка AI"),
                                 "impact": ai_result.get("impact", "неясно"),
+                                "action": ai_result.get("action", "monitor"),
                                 "summary": ai_result.get("summary", "AI-анализ не выполнен"),
+                                "why_it_matters": ai_result.get(
+                                    "why_it_matters",
+                                    "Практическая значимость не определена."
+                                ),
                                 "url": item.url,
                                 "ai_debug": ai_result.get("ai_debug", "no-debug"),
                             })
@@ -739,7 +776,9 @@ async def main():
                             "title": item.title,
                             "relevance": "ошибка AI",
                             "impact": "неясно",
+                            "action": "monitor",
                             "summary": "OpenAI API не подключен",
+                            "why_it_matters": "API ключ OpenAI не найден.",
                             "url": item.url,
                             "ai_debug": "OPENAI_API_KEY не найден",
                         })
