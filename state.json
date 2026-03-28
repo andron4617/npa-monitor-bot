@@ -1,5 +1,7 @@
 {
-  "error_notified_at": {},
+  "error_notified_at": {
+    "Банк России": 1774673439
+  },
   "seen": {
     "Банк России": {
       "https://cbr.ru/Content/Document/File/48780/form_orv.pdf": 1773105571
