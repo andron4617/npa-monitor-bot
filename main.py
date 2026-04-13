@@ -22,7 +22,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 SOURCES_FILE = "sources.json"
 STATE_FILE = "state.json"
 
-MAX_ITEMS_PER_REGULATOR = 5
 HTTP_TIMEOUT_SECONDS = 30
 HTTP_RETRIES = 3
 HTTP_RETRY_BACKOFF = 1.6
@@ -31,6 +30,8 @@ TELEGRAM_RETRIES = 5
 
 OPENAI_MODEL = "gpt-5.4"
 OPENAI_MAX_CONCURRENT = 2
+
+MAX_DOC_LINKS_PER_SOURCE = 80
 
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -117,6 +118,60 @@ TEXT_KEEP_PATTERNS = [
     r"проверочн\w*\s+лист",
     r"оператор\w*\s+связи",
     r"защит\w*\s+персональн\w*\s+данн\w*",
+]
+
+PROJECTS_NPA_SCORE_RULES: List[Tuple[int, str]] = [
+    (10, r"средств?\s+защит\w*\s+конфиденциальн\w*\s+информац\w*"),
+    (10, r"защит\w*\s+конфиденциальн\w*\s+информац\w*"),
+    (10, r"лицензирован\w*.*средств?\s+защит\w*"),
+    (9, r"лицензирован\w*.*криптограф"),
+    (9, r"лицензирован\w*.*шифр"),
+    (9, r"сертификац\w*.*средств?\s+защит\w*"),
+    (9, r"техническ\w*\s+защит\w*\s+информац\w*"),
+    (8, r"критическ\w*\s+информационн\w*\s+инфраструктур\w*"),
+    (8, r"\bкии\b"),
+    (8, r"гос(с)?опка"),
+    (8, r"нкцки"),
+    (8, r"компьютерн\w*\s+инцидент"),
+    (8, r"компьютерн\w*\s+атак"),
+    (7, r"защит\w*\s+информац\w*"),
+    (7, r"информационн\w*\s+безопасност\w*"),
+    (7, r"кибербезопасност\w*"),
+    (7, r"безопасн\w*\s+разработк\w*"),
+    (7, r"\bскзи\b"),
+    (7, r"криптограф\w*"),
+    (7, r"шифрован\w*"),
+    (6, r"персональн\w*\s+данн\w*"),
+    (6, r"обезличиван\w*"),
+    (6, r"биометрическ\w*"),
+    (6, r"\bори\b"),
+    (6, r"организатор\w*\s+распространени\w*\s+информац\w*"),
+    (6, r"реестр\w*\s+ори"),
+    (6, r"оператор\w*\s+связи"),
+    (6, r"надзор\w*\s+в\s+област\w*\s+связи"),
+    (5, r"удостоверяющ\w*\s+центр"),
+    (5, r"электронн\w*\s+подпис\w*"),
+    (5, r"аутентификац\w*"),
+    (5, r"идентификац\w*"),
+    (4, r"государственн\w*\s+информационн\w*\s+систем\w*"),
+    (4, r"\bгис\b"),
+    (-10, r"пенсионн\w*"),
+    (-10, r"социальн\w*\s+поддержк\w*"),
+    (-9, r"страхов\w*\s+пенси"),
+    (-8, r"выплат\w*"),
+    (-8, r"медицинск\w*"),
+    (-8, r"санатор"),
+    (-7, r"оплат\w*\s+труд"),
+    (-7, r"зарплат"),
+    (-7, r"стипенди"),
+    (-7, r"кадров"),
+    (-7, r"аттестац"),
+    (-7, r"служебн\w*\s+поведени"),
+    (-7, r"конфликт\w*\s+интерес"),
+    (-7, r"соцгаранти"),
+    (-6, r"образован"),
+    (-6, r"спорт"),
+    (-6, r"культур"),
 ]
 
 
@@ -395,13 +450,38 @@ def text_matches_any(text: str, patterns: List[str]) -> bool:
     return any(re.search(p, text, flags=re.IGNORECASE) for p in patterns)
 
 
+def projects_npa_score(item: Item) -> int:
+    text = combined_item_text(item)
+    score = 0
+
+    for weight, pattern in PROJECTS_NPA_SCORE_RULES:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            score += weight
+
+    if "фсб" in text:
+        score += 2
+    if "фстэк" in text:
+        score += 2
+    if "роскомнадзор" in text:
+        score += 1
+    if "минцифр" in text:
+        score += 1
+    if "банк россии" in text:
+        score += 1
+
+    return score
+
+
 def prefilter_item(item: Item, regulator: str) -> bool:
     text = combined_item_text(item)
 
     if text_matches_any(text, TEXT_DROP_PATTERNS):
         return False
 
-    if regulator in {"ФСТЭК", "ФСБ", "Минцифры", "Роскомнадзор", "Банк России", "Проекты НПА"}:
+    if regulator == "Проекты НПА":
+        return True
+
+    if regulator in {"ФСТЭК", "ФСБ", "Минцифры", "Роскомнадзор", "Банк России"}:
         return True
 
     return text_matches_any(text, TEXT_KEEP_PATTERNS)
@@ -653,6 +733,7 @@ async def collect_regulation_projects(
                 )
             )
 
+    items.sort(key=projects_npa_score, reverse=True)
     return items, None
 
 
@@ -668,7 +749,7 @@ async def collect_items_for_source(
         page_html = await fetch_text(session, url)
         links = extract_links_from_html(url, page_html)
         doc_links = pick_document_links(links)
-        doc_links = doc_links[:MAX_ITEMS_PER_REGULATOR * 8]
+        doc_links = doc_links[:MAX_DOC_LINKS_PER_SOURCE]
 
         items: List[Item] = []
         for link in doc_links:
@@ -727,13 +808,16 @@ def item_seen_key(item: Item) -> str:
     return item.dedupe_key or item.url
 
 
-def is_new_and_mark(state: Dict[str, Any], regulator: str, item: Item) -> bool:
+def has_seen(state: Dict[str, Any], regulator: str, item: Item) -> bool:
     seen = state["seen"].setdefault(regulator, {})
-    key = item_seen_key(item)
-    if key in seen:
-        return False
-    seen[key] = int(time.time())
-    return True
+    return item_seen_key(item) in seen
+
+
+def mark_seen_many(state: Dict[str, Any], regulator: str, items: List[Item]) -> None:
+    seen = state["seen"].setdefault(regulator, {})
+    now_ts = int(time.time())
+    for item in items:
+        seen[item_seen_key(item)] = now_ts
 
 
 def compact_seen(state: Dict[str, Any], keep_days: int = 45) -> None:
@@ -1055,17 +1139,18 @@ async def main():
                 if uniq_key not in uniq:
                     uniq[uniq_key] = it
 
-            new_items: List[Item] = []
-            for it in uniq.values():
-                if is_new_and_mark(state, regulator, it):
-                    new_items.append(it)
+            new_items: List[Item] = [it for it in uniq.values() if not has_seen(state, regulator, it)]
 
-            prefiltered_items = [it for it in new_items if prefilter_item(it, regulator)]
-            prefiltered_items = prefiltered_items[:MAX_ITEMS_PER_REGULATOR]
+            if regulator == "Проекты НПА":
+                new_items.sort(key=projects_npa_score, reverse=True)
+
+            skipped_items: List[Item] = [it for it in new_items if not prefilter_item(it, regulator)]
+            prefiltered_items: List[Item] = [it for it in new_items if prefilter_item(it, regulator)]
+
+            analyzed_items: List[Dict[str, str]] = []
+            analyzed_source_items: List[Item] = []
 
             if prefiltered_items:
-                analyzed_items: List[Dict[str, str]] = []
-
                 if openai_client:
                     tasks = [
                         analyze_with_openai(openai_client, regulator, item, ai_sem)
@@ -1074,6 +1159,7 @@ async def main():
                     ai_results = await asyncio.gather(*tasks, return_exceptions=True)
 
                     for item, ai_result in zip(prefiltered_items, ai_results):
+                        analyzed_source_items.append(item)
                         if isinstance(ai_result, Exception):
                             analyzed_items.append({
                                 "title": item.title,
@@ -1101,6 +1187,7 @@ async def main():
                             })
                 else:
                     for item in prefiltered_items:
+                        analyzed_source_items.append(item)
                         analyzed_items.append({
                             "title": item.title,
                             "relevance": "ошибка AI",
@@ -1112,11 +1199,26 @@ async def main():
                             "ai_debug": "OPENAI_API_KEY не найден",
                         })
 
-                final_items = [it for it in analyzed_items if should_send_after_ai(it, regulator)]
+            final_items = [it for it in analyzed_items if should_send_after_ai(it, regulator)]
 
-                if final_items:
-                    msg = format_message(regulator, final_items)
-                    await send_tg(session, msg)
+            sent_source_items: List[Item] = []
+            not_sent_source_items: List[Item] = []
+
+            if analyzed_items:
+                final_urls = {it["url"] for it in final_items}
+                sent_source_items = [it for it in analyzed_source_items if it.url in final_urls]
+                not_sent_source_items = [it for it in analyzed_source_items if it.url not in final_urls]
+
+            if final_items:
+                msg = format_message(regulator, final_items)
+                await send_tg(session, msg)
+                mark_seen_many(state, regulator, sent_source_items)
+
+            if skipped_items:
+                mark_seen_many(state, regulator, skipped_items)
+
+            if not_sent_source_items:
+                mark_seen_many(state, regulator, not_sent_source_items)
 
             if errors and not prefiltered_items and should_send_error(state, regulator):
                 lines = []
