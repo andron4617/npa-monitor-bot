@@ -251,7 +251,9 @@ async def fetch_json_post(
                 try:
                     return json.loads(body)
                 except Exception as e:
-                    raise RuntimeError(f"Некорректный JSON: {type(e).__name__}: {e}; body={body[:300]}")
+                    raise RuntimeError(
+                        f"Некорректный JSON: {type(e).__name__}: {e}; body={body[:300]}"
+                    )
         except Exception as e:
             last_err = e
             if attempt < HTTP_RETRIES:
@@ -286,7 +288,9 @@ async def fetch_json_get(
                 try:
                     return json.loads(body)
                 except Exception as e:
-                    raise RuntimeError(f"Некорректный JSON: {type(e).__name__}: {e}; body={body[:300]}")
+                    raise RuntimeError(
+                        f"Некорректный JSON: {type(e).__name__}: {e}; body={body[:300]}"
+                    )
         except Exception as e:
             last_err = e
             if attempt < HTTP_RETRIES:
@@ -443,7 +447,7 @@ async def fetch_regulation_stage_info(
     session: aiohttp.ClientSession,
     project_id: str,
 ) -> Tuple[str, str]:
-    stage_url = f"https://regulation.gov.ru/api/PublicProjects/GetProjectStages/{project_id}"
+    stage_url = f"https://regulation.gov.ru/api/public/PublicProjects/GetProjectStages/{project_id}"
 
     try:
         data = await fetch_json_get(session, stage_url)
@@ -493,16 +497,16 @@ async def fetch_regulation_stage_info(
                     break
 
             if not stage_name:
-                first = result[-1]
-                if isinstance(first, dict):
+                last = result[-1]
+                if isinstance(last, dict):
                     stage_name = normalize_spaces(str(
-                        first.get("stage")
-                        or first.get("stageName")
+                        last.get("stage")
+                        or last.get("stageName")
                         or ""
                     ))
                     status_name = normalize_spaces(str(
-                        first.get("status")
-                        or first.get("statusName")
+                        last.get("status")
+                        or last.get("statusName")
                         or ""
                     ))
 
@@ -513,17 +517,31 @@ async def collect_regulation_projects(
     session: aiohttp.ClientSession,
     max_pages: int = 5,
 ) -> Tuple[List[Item], Optional[str]]:
-    api_url = "https://regulation.gov.ru/api/PublicProjects/GetFiltered"
+    api_url = "https://regulation.gov.ru/api/public/PublicProjects/GetFiltered"
 
     items: List[Item] = []
     seen_keys: set[str] = set()
 
     for page in range(1, max_pages + 1):
         payload = {
-            "page": page,
-            "pageSize": 20,
-            "sortColumn": "publicationDate",
-            "sortDirection": "desc",
+            "listParams": {
+                "filterModel": {
+                    "filters": "",
+                    "page": page,
+                    "pageSize": 20,
+                }
+            },
+            "orderedFields": [
+                "title",
+                "developedDepartment",
+                "projectId",
+                "projectType",
+                "creationDate",
+                "publicationDate",
+                "stage",
+                "status",
+                "procedure",
+            ],
         }
 
         try:
@@ -640,10 +658,10 @@ async def collect_regulation_projects(
 
 async def collect_items_for_source(
     session: aiohttp.ClientSession,
-    source_name: str,
+    regulator: str,
     url: str,
 ) -> Tuple[List[Item], Optional[str]]:
-    if source_name == "Проекты НПА":
+    if regulator == "Проекты НПА":
         return await collect_regulation_projects(session, max_pages=5)
 
     try:
@@ -755,7 +773,7 @@ async def analyze_with_openai(
         "summary": "AI-анализ не выполнен",
         "why_it_matters": "Не удалось получить оценку влияния документа.",
         "title": item.title,
-        "ai_debug": "неизвестная ошибка"
+        "ai_debug": "неизвестная ошибка",
     }
 
     if not OPENAI_API_KEY:
@@ -849,7 +867,7 @@ ACTION:
         async with sem:
             response = await client.responses.create(
                 model=OPENAI_MODEL,
-                input=prompt
+                input=prompt,
             )
 
         raw = (response.output_text or "").strip()
@@ -865,7 +883,9 @@ ACTION:
         try:
             data = json.loads(match.group(0))
         except Exception as e:
-            fallback["ai_debug"] = f"JSON parse error: {type(e).__name__}: {e}; raw={raw[:300]}"
+            fallback["ai_debug"] = (
+                f"JSON parse error: {type(e).__name__}: {e}; raw={raw[:300]}"
+            )
             return fallback
 
         title = clean_title(str(data.get("title", item.title)).strip()) or item.title
@@ -893,7 +913,7 @@ ACTION:
             "summary": summary,
             "why_it_matters": why_it_matters,
             "title": title,
-            "ai_debug": "ok"
+            "ai_debug": "ok",
         }
 
     except Exception as e:
@@ -917,7 +937,7 @@ def should_send_after_ai(item: Dict[str, str], regulator: str) -> bool:
             "Минцифры",
             "Роскомнадзор",
             "Банк России",
-            "Проекты НПА"
+            "Проекты НПА",
         }
 
     return False
@@ -982,7 +1002,7 @@ async def send_tg(session: aiohttp.ClientSession, text: str) -> None:
                         raise RuntimeError(f"Telegram 429: {body}")
                     if r.status >= 400:
                         raise RuntimeError(f"Telegram error {r.status}: {body}")
-                    return
+                    break
             except Exception as e:
                 last_err = e
                 if attempt < TELEGRAM_RETRIES:
