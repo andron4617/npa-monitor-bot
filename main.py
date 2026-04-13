@@ -126,6 +126,7 @@ class Item:
     url: str
     content_preview: str = ""
     source_type: str = "html"
+    dedupe_key: Optional[str] = None
 
 
 def now_msk_str() -> str:
@@ -213,6 +214,79 @@ async def fetch_bytes(session: aiohttp.ClientSession, url: str) -> bytes:
                     body = await r.read()
                     raise RuntimeError(f"HTTP {r.status}: {body[:200]}")
                 return await r.read()
+        except Exception as e:
+            last_err = e
+            if attempt < HTTP_RETRIES:
+                await asyncio.sleep((HTTP_RETRY_BACKOFF ** (attempt - 1)) + 0.2)
+            else:
+                raise
+    raise RuntimeError(str(last_err))
+
+
+async def fetch_json_post(
+    session: aiohttp.ClientSession,
+    url: str,
+    payload: Dict[str, Any],
+    headers: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    last_err = None
+    merged_headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=UTF-8",
+        "Origin": "https://regulation.gov.ru",
+        "Referer": "https://regulation.gov.ru/",
+    }
+    if headers:
+        merged_headers.update(headers)
+
+    for attempt in range(1, HTTP_RETRIES + 1):
+        try:
+            async with session.post(url, json=payload, headers=merged_headers) as r:
+                body = await r.text(errors="ignore")
+                if r.status == 429 or 500 <= r.status <= 599:
+                    raise RuntimeError(f"HTTP {r.status}: {body[:300]}")
+                if r.status >= 400:
+                    raise RuntimeError(f"HTTP {r.status}: {body[:300]}")
+                try:
+                    return json.loads(body)
+                except Exception as e:
+                    raise RuntimeError(f"Некорректный JSON: {type(e).__name__}: {e}; body={body[:300]}")
+        except Exception as e:
+            last_err = e
+            if attempt < HTTP_RETRIES:
+                await asyncio.sleep((HTTP_RETRY_BACKOFF ** (attempt - 1)) + 0.2)
+            else:
+                raise
+    raise RuntimeError(str(last_err))
+
+
+async def fetch_json_get(
+    session: aiohttp.ClientSession,
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    last_err = None
+    merged_headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://regulation.gov.ru/",
+    }
+    if headers:
+        merged_headers.update(headers)
+
+    for attempt in range(1, HTTP_RETRIES + 1):
+        try:
+            async with session.get(url, headers=merged_headers, allow_redirects=True) as r:
+                body = await r.text(errors="ignore")
+                if r.status == 429 or 500 <= r.status <= 599:
+                    raise RuntimeError(f"HTTP {r.status}: {body[:300]}")
+                if r.status >= 400:
+                    raise RuntimeError(f"HTTP {r.status}: {body[:300]}")
+                try:
+                    return json.loads(body)
+                except Exception as e:
+                    raise RuntimeError(f"Некорректный JSON: {type(e).__name__}: {e}; body={body[:300]}")
         except Exception as e:
             last_err = e
             if attempt < HTTP_RETRIES:
@@ -349,11 +423,229 @@ async def title_and_preview_for_doc(session: aiohttp.ClientSession, url: str) ->
         return "Документ", "", "unknown"
 
 
+def parse_regulation_result_list(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if isinstance(data.get("result"), list):
+        return data.get("result", [])
+
+    if isinstance(data.get("items"), list):
+        return data.get("items", [])
+
+    if isinstance(data.get("data"), dict) and isinstance(data["data"].get("result"), list):
+        return data["data"]["result"]
+
+    if isinstance(data.get("data"), list):
+        return data["data"]
+
+    return []
+
+
+async def fetch_regulation_stage_info(
+    session: aiohttp.ClientSession,
+    project_id: str,
+) -> Tuple[str, str]:
+    stage_url = f"https://regulation.gov.ru/api/PublicProjects/GetProjectStages/{project_id}"
+
+    try:
+        data = await fetch_json_get(session, stage_url)
+    except Exception:
+        return "", ""
+
+    stage_name = ""
+    status_name = ""
+
+    if isinstance(data, dict):
+        result = data.get("result", data)
+
+        if isinstance(result, dict):
+            stage_name = normalize_spaces(str(
+                result.get("stage")
+                or result.get("stageName")
+                or result.get("currentStage")
+                or ""
+            ))
+            status_name = normalize_spaces(str(
+                result.get("status")
+                or result.get("statusName")
+                or result.get("currentStatus")
+                or ""
+            ))
+
+        elif isinstance(result, list) and result:
+            for entry in result:
+                if not isinstance(entry, dict):
+                    continue
+                is_current = bool(
+                    entry.get("isCurrent")
+                    or entry.get("current")
+                    or entry.get("active")
+                )
+                if is_current:
+                    stage_name = normalize_spaces(str(
+                        entry.get("stage")
+                        or entry.get("stageName")
+                        or ""
+                    ))
+                    status_name = normalize_spaces(str(
+                        entry.get("status")
+                        or entry.get("statusName")
+                        or ""
+                    ))
+                    break
+
+            if not stage_name:
+                first = result[-1]
+                if isinstance(first, dict):
+                    stage_name = normalize_spaces(str(
+                        first.get("stage")
+                        or first.get("stageName")
+                        or ""
+                    ))
+                    status_name = normalize_spaces(str(
+                        first.get("status")
+                        or first.get("statusName")
+                        or ""
+                    ))
+
+    return stage_name, status_name
+
+
+async def collect_regulation_projects(
+    session: aiohttp.ClientSession,
+    max_pages: int = 5,
+) -> Tuple[List[Item], Optional[str]]:
+    api_url = "https://regulation.gov.ru/api/PublicProjects/GetFiltered"
+
+    items: List[Item] = []
+    seen_keys: set[str] = set()
+
+    for page in range(1, max_pages + 1):
+        payload = {
+            "page": page,
+            "pageSize": 20,
+            "sortColumn": "publicationDate",
+            "sortDirection": "desc",
+        }
+
+        try:
+            data = await fetch_json_post(session, api_url, payload)
+        except asyncio.TimeoutError:
+            return [], "Источник не ответил вовремя"
+        except Exception as e:
+            return [], f"{type(e).__name__}: {e}"
+
+        result = parse_regulation_result_list(data)
+        if not result:
+            break
+
+        for raw in result:
+            if not isinstance(raw, dict):
+                continue
+
+            project_id = str(
+                raw.get("projectId")
+                or raw.get("id")
+                or raw.get("Id")
+                or ""
+            ).strip()
+
+            if not project_id:
+                continue
+
+            title = clean_title(str(
+                raw.get("title")
+                or raw.get("name")
+                or raw.get("projectName")
+                or "Проект НПА"
+            ))
+
+            department = normalize_spaces(str(
+                raw.get("developedDepartment")
+                or raw.get("developer")
+                or raw.get("department")
+                or ""
+            ))
+
+            project_type = normalize_spaces(str(
+                raw.get("projectType")
+                or raw.get("type")
+                or ""
+            ))
+
+            procedure = normalize_spaces(str(
+                raw.get("procedure")
+                or raw.get("procedureName")
+                or ""
+            ))
+
+            publication_date = normalize_spaces(str(
+                raw.get("publicationDate")
+                or raw.get("createDate")
+                or raw.get("creationDate")
+                or raw.get("date")
+                or ""
+            ))
+
+            stage = normalize_spaces(str(
+                raw.get("stage")
+                or raw.get("stageName")
+                or ""
+            ))
+
+            status = normalize_spaces(str(
+                raw.get("status")
+                or raw.get("statusName")
+                or ""
+            ))
+
+            if not stage or not status:
+                stage_api, status_api = await fetch_regulation_stage_info(session, project_id)
+                if stage_api:
+                    stage = stage_api
+                if status_api:
+                    status = status_api
+
+            url = f"https://regulation.gov.ru/projects/{project_id}"
+
+            dedupe_key = normalize_spaces(
+                f"{project_id}|{stage}|{status}|{publication_date}"
+            )
+
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+
+            preview_parts = [
+                title,
+                f"Разработчик: {department}" if department else "",
+                f"Тип: {project_type}" if project_type else "",
+                f"Процедура: {procedure}" if procedure else "",
+                f"Стадия: {stage}" if stage else "",
+                f"Статус: {status}" if status else "",
+                f"Дата: {publication_date}" if publication_date else "",
+            ]
+            preview = normalize_spaces(" ".join(p for p in preview_parts if p))
+
+            items.append(
+                Item(
+                    title=title,
+                    url=url,
+                    content_preview=preview[:5000],
+                    source_type="regulation_api",
+                    dedupe_key=dedupe_key,
+                )
+            )
+
+    return items, None
+
+
 async def collect_items_for_source(
     session: aiohttp.ClientSession,
     source_name: str,
     url: str,
 ) -> Tuple[List[Item], Optional[str]]:
+    if source_name == "Проекты НПА":
+        return await collect_regulation_projects(session, max_pages=5)
+
     try:
         page_html = await fetch_text(session, url)
         links = extract_links_from_html(url, page_html)
@@ -379,7 +671,15 @@ async def collect_items_for_source(
                 if title == "PDF документ":
                     title = "Документ ФСТЭК"
 
-            items.append(Item(title=title, url=link, content_preview=preview, source_type=source_type))
+            items.append(
+                Item(
+                    title=title,
+                    url=link,
+                    content_preview=preview,
+                    source_type=source_type,
+                    dedupe_key=None,
+                )
+            )
 
         uniq: Dict[str, Item] = {}
         for it in items:
@@ -405,11 +705,16 @@ def load_state() -> Dict[str, Any]:
     return st
 
 
-def is_new_and_mark(state: Dict[str, Any], regulator: str, url: str) -> bool:
+def item_seen_key(item: Item) -> str:
+    return item.dedupe_key or item.url
+
+
+def is_new_and_mark(state: Dict[str, Any], regulator: str, item: Item) -> bool:
     seen = state["seen"].setdefault(regulator, {})
-    if url in seen:
+    key = item_seen_key(item)
+    if key in seen:
         return False
-    seen[url] = int(time.time())
+    seen[key] = int(time.time())
     return True
 
 
@@ -421,10 +726,10 @@ def compact_seen(state: Dict[str, Any], keep_days: int = 45) -> None:
         if not isinstance(reg_map, dict):
             seen[reg] = {}
             continue
-        for url in list(reg_map.keys()):
-            ts = reg_map.get(url, 0)
+        for key in list(reg_map.keys()):
+            ts = reg_map.get(key, 0)
             if not isinstance(ts, int) or ts < cutoff:
-                reg_map.pop(url, None)
+                reg_map.pop(key, None)
 
 
 def should_send_error(state: Dict[str, Any], regulator: str, cooldown_hours: int = 12) -> bool:
@@ -719,16 +1024,20 @@ async def main():
                 else:
                     all_items.extend(items)
 
+                if regulator == "Проекты НПА":
+                    break
+
             uniq: Dict[str, Item] = {}
             for it in all_items:
-                if is_drop_url(it.url):
+                if regulator != "Проекты НПА" and is_drop_url(it.url):
                     continue
-                if it.url not in uniq:
-                    uniq[it.url] = it
+                uniq_key = item_seen_key(it)
+                if uniq_key not in uniq:
+                    uniq[uniq_key] = it
 
             new_items: List[Item] = []
             for it in uniq.values():
-                if is_new_and_mark(state, regulator, it.url):
+                if is_new_and_mark(state, regulator, it):
                     new_items.append(it)
 
             prefiltered_items = [it for it in new_items if prefilter_item(it, regulator)]
