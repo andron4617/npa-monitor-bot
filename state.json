@@ -1,6 +1,6 @@
 {
   "error_notified_at": {
-    "Банк России": 1774733160,
+    "Банк России": 1776526329,
     "Проекты НПА": 1776089286
   },
   "seen": {
@@ -468,7 +468,12 @@
       "http://publication.pravo.gov.ru/document/0001202604170033": 1776451677,
       "http://publication.pravo.gov.ru/document/0001202604170034": 1776451677,
       "http://publication.pravo.gov.ru/document/0001202604170035": 1776451677,
-      "http://publication.pravo.gov.ru/document/0001202604170036": 1776451677
+      "http://publication.pravo.gov.ru/document/0001202604170036": 1776451677,
+      "http://publication.pravo.gov.ru/document/0001202604180003": 1776526294,
+      "http://publication.pravo.gov.ru/document/0001202604180004": 1776526294,
+      "http://publication.pravo.gov.ru/document/0001202604180005": 1776526294,
+      "http://publication.pravo.gov.ru/document/0001202604180006": 1776526294,
+      "http://publication.pravo.gov.ru/document/0001202604180007": 1776526294
     },
     "Проекты НПА": {
       "01/01/04-26/00167030|Text|Discussion|2026-04-07T18:12:18.976": 1776090417,
